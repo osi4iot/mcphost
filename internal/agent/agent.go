@@ -2,11 +2,13 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcphost/internal/config"
 	"github.com/mark3labs/mcphost/internal/models"
 	"github.com/mark3labs/mcphost/internal/tools"
@@ -154,11 +156,20 @@ func (a *Agent) GenerateWithLoop(ctx context.Context, messages []*schema.Message
 							onToolResult(toolCall.Function.Name, toolCall.Function.Arguments, errorMsg, true)
 						}
 					} else {
+						// Check if this is an MCP tool response with an error
+						isError := false
+						if output != "" {
+							var mcpResult mcp.CallToolResult
+							if err := json.Unmarshal([]byte(output), &mcpResult); err == nil && mcpResult.IsError {
+								isError = true
+							}
+						}
+
 						toolMessage := schema.ToolMessage(output, toolCall.ID)
 						workingMessages = append(workingMessages, toolMessage)
 
 						if onToolResult != nil {
-							onToolResult(toolCall.Function.Name, toolCall.Function.Arguments, output, false)
+							onToolResult(toolCall.Function.Name, toolCall.Function.Arguments, output, isError)
 						}
 					}
 				} else {

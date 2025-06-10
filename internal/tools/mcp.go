@@ -154,9 +154,11 @@ func (t *mcpToolImpl) InvokableRun(ctx context.Context, argumentsInJSON string, 
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal mcp tool result: %w", err)
 	}
-	if result.IsError {
-		return "", fmt.Errorf("failed to call mcp tool, mcp server return error: %s", marshaledResult)
-	}
+
+	// If the MCP server returned an error, we still return the error content as the response
+	// to the LLM so it can see what went wrong. The error will be shown to the user via
+	// the UI callbacks, but the LLM needs to see the actual error details to continue
+	// the conversation appropriately.
 	return marshaledResult, nil
 }
 
