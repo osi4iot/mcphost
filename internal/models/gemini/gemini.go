@@ -517,7 +517,10 @@ func (cm *ChatModel) convertSchemaMessage(message *schema.Message) (*genai.Conte
 	if message.Role == schema.Tool {
 		var response map[string]any
 		if err := json.Unmarshal([]byte(message.Content), &response); err != nil {
-			return nil, fmt.Errorf("unmarshal tool response failed: %w", err)
+			// If the content is not valid JSON, treat it as a plain text error response
+			response = map[string]any{
+				"error": message.Content,
+			}
 		}
 		parts = append(parts, &genai.Part{
 			FunctionResponse: &genai.FunctionResponse{
