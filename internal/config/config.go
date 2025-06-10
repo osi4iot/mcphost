@@ -121,25 +121,32 @@ func LoadMCPConfig(configFile string) (*Config, error) {
 	return &config, nil
 }
 
-// LoadSystemPrompt loads system prompt from file
-func LoadSystemPrompt(filePath string) (string, error) {
-	if filePath == "" {
+// LoadSystemPrompt loads system prompt from file or returns the string directly
+func LoadSystemPrompt(input string) (string, error) {
+	if input == "" {
 		return "", nil
 	}
 
-	v := viper.New()
-	v.SetConfigFile(filePath)
+	// Check if input is a file that exists
+	if _, err := os.Stat(input); err == nil {
+		// Treat as file path
+		v := viper.New()
+		v.SetConfigFile(input)
 
-	if err := v.ReadInConfig(); err != nil {
-		return "", fmt.Errorf("error reading system prompt file: %v", err)
+		if err := v.ReadInConfig(); err != nil {
+			return "", fmt.Errorf("error reading system prompt file: %v", err)
+		}
+
+		systemPrompt := v.GetString("systemPrompt")
+		if systemPrompt == "" {
+			return "", fmt.Errorf("systemPrompt field not found in config file")
+		}
+
+		return systemPrompt, nil
 	}
 
-	systemPrompt := v.GetString("systemPrompt")
-	if systemPrompt == "" {
-		return "", fmt.Errorf("systemPrompt field not found in config file")
-	}
-
-	return systemPrompt, nil
+	// Treat as direct string
+	return input, nil
 }
 
 // createDefaultConfig creates a default .mcphost.yml file in the user's home directory
