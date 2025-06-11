@@ -59,18 +59,21 @@ func init() {
 	rootCmd.AddCommand(scriptCmd)
 	
 	// Add the same flags as the root command, but they will override script settings
-	scriptCmd.Flags().StringVar(&systemPromptFile, "system-prompt", "", "system prompt text or path to system prompt json file")
-	scriptCmd.Flags().IntVar(&messageWindow, "message-window", 40, "number of messages to keep in context")
+	scriptCmd.Flags().StringVar(&systemPromptFile, "system-prompt", "", "system prompt text or path to text file")
 	scriptCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "model to use (format: provider:model)")
 	scriptCmd.Flags().BoolVar(&debugMode, "debug", false, "enable debug logging")
 	scriptCmd.Flags().StringVarP(&promptFlag, "prompt", "p", "", "override the prompt from the script file")
 	scriptCmd.Flags().BoolVar(&quietFlag, "quiet", false, "suppress all output")
 	scriptCmd.Flags().IntVar(&maxSteps, "max-steps", 0, "maximum number of agent steps (0 for unlimited)")
-	scriptCmd.Flags().StringVar(&openaiBaseURL, "openai-url", "", "base URL for OpenAI API")
-	scriptCmd.Flags().StringVar(&anthropicBaseURL, "anthropic-url", "", "base URL for Anthropic API")
-	scriptCmd.Flags().StringVar(&openaiAPIKey, "openai-api-key", "", "OpenAI API key")
-	scriptCmd.Flags().StringVar(&anthropicAPIKey, "anthropic-api-key", "", "Anthropic API key")
-	scriptCmd.Flags().StringVar(&googleAPIKey, "google-api-key", "", "Google (Gemini) API key")
+	scriptCmd.Flags().StringVar(&providerURL, "provider-url", "", "base URL for the provider API (applies to OpenAI, Anthropic, Ollama, and Google)")
+	scriptCmd.Flags().StringVar(&providerAPIKey, "provider-api-key", "", "API key for the provider (applies to OpenAI, Anthropic, and Google)")
+	
+	// Model generation parameters
+	scriptCmd.Flags().IntVar(&maxTokens, "max-tokens", 4096, "maximum number of tokens in the response")
+	scriptCmd.Flags().Float32Var(&temperature, "temperature", 0.7, "controls randomness in responses (0.0-1.0)")
+	scriptCmd.Flags().Float32Var(&topP, "top-p", 0.95, "controls diversity via nucleus sampling (0.0-1.0)")
+	scriptCmd.Flags().Int32Var(&topK, "top-k", 40, "controls diversity by limiting top K tokens to sample from")
+	scriptCmd.Flags().StringSliceVar(&stopSequences, "stop-sequences", nil, "custom stop sequences (comma-separated)")
 }
 
 // parseCustomVariables extracts custom variables from command line arguments
@@ -147,14 +150,15 @@ func runScriptCommand(ctx context.Context, scriptFile string, variables map[stri
 	originalPromptFlag := promptFlag
 	originalModelFlag := modelFlag
 	originalMaxSteps := maxSteps
-	originalMessageWindow := messageWindow
 	originalDebugMode := debugMode
 	originalSystemPromptFile := systemPromptFile
-	originalOpenAIAPIKey := openaiAPIKey
-	originalAnthropicAPIKey := anthropicAPIKey
-	originalGoogleAPIKey := googleAPIKey
-	originalOpenAIURL := openaiBaseURL
-	originalAnthropicURL := anthropicBaseURL
+	originalProviderAPIKey := providerAPIKey
+	originalProviderURL := providerURL
+	originalMaxTokens := maxTokens
+	originalTemperature := temperature
+	originalTopP := topP
+	originalTopK := topK
+	originalStopSequences := stopSequences
 
 	// Create config from script or load normal config
 	var mcpConfig *config.Config
@@ -183,14 +187,15 @@ func runScriptCommand(ctx context.Context, scriptFile string, variables map[stri
 		promptFlag = originalPromptFlag
 		modelFlag = originalModelFlag
 		maxSteps = originalMaxSteps
-		messageWindow = originalMessageWindow
 		debugMode = originalDebugMode
 		systemPromptFile = originalSystemPromptFile
-		openaiAPIKey = originalOpenAIAPIKey
-		anthropicAPIKey = originalAnthropicAPIKey
-		googleAPIKey = originalGoogleAPIKey
-		openaiBaseURL = originalOpenAIURL
-		anthropicBaseURL = originalAnthropicURL
+		providerAPIKey = originalProviderAPIKey
+		providerURL = originalProviderURL
+		maxTokens = originalMaxTokens
+		temperature = originalTemperature
+		topP = originalTopP
+		topK = originalTopK
+		stopSequences = originalStopSequences
 		scriptMCPConfig = nil
 	}()
 
@@ -205,32 +210,35 @@ func mergeScriptConfig(mcpConfig *config.Config, scriptConfig *config.Config) {
 	if scriptConfig.MaxSteps != 0 {
 		mcpConfig.MaxSteps = scriptConfig.MaxSteps
 	}
-	if scriptConfig.MessageWindow != 0 {
-		mcpConfig.MessageWindow = scriptConfig.MessageWindow
-	}
 	if scriptConfig.Debug {
 		mcpConfig.Debug = scriptConfig.Debug
 	}
 	if scriptConfig.SystemPrompt != "" {
 		mcpConfig.SystemPrompt = scriptConfig.SystemPrompt
 	}
-	if scriptConfig.OpenAIAPIKey != "" {
-		mcpConfig.OpenAIAPIKey = scriptConfig.OpenAIAPIKey
+	if scriptConfig.ProviderAPIKey != "" {
+		mcpConfig.ProviderAPIKey = scriptConfig.ProviderAPIKey
 	}
-	if scriptConfig.AnthropicAPIKey != "" {
-		mcpConfig.AnthropicAPIKey = scriptConfig.AnthropicAPIKey
-	}
-	if scriptConfig.GoogleAPIKey != "" {
-		mcpConfig.GoogleAPIKey = scriptConfig.GoogleAPIKey
-	}
-	if scriptConfig.OpenAIURL != "" {
-		mcpConfig.OpenAIURL = scriptConfig.OpenAIURL
-	}
-	if scriptConfig.AnthropicURL != "" {
-		mcpConfig.AnthropicURL = scriptConfig.AnthropicURL
+	if scriptConfig.ProviderURL != "" {
+		mcpConfig.ProviderURL = scriptConfig.ProviderURL
 	}
 	if scriptConfig.Prompt != "" {
 		mcpConfig.Prompt = scriptConfig.Prompt
+	}
+	if scriptConfig.MaxTokens != 0 {
+		mcpConfig.MaxTokens = scriptConfig.MaxTokens
+	}
+	if scriptConfig.Temperature != nil {
+		mcpConfig.Temperature = scriptConfig.Temperature
+	}
+	if scriptConfig.TopP != nil {
+		mcpConfig.TopP = scriptConfig.TopP
+	}
+	if scriptConfig.TopK != nil {
+		mcpConfig.TopK = scriptConfig.TopK
+	}
+	if len(scriptConfig.StopSequences) > 0 {
+		mcpConfig.StopSequences = scriptConfig.StopSequences
 	}
 }
 
@@ -248,29 +256,32 @@ func applyScriptFlags(mcpConfig *config.Config, cmd *cobra.Command) {
 	if !cmd.Flags().Changed("max-steps") && mcpConfig.MaxSteps != 0 {
 		maxSteps = mcpConfig.MaxSteps
 	}
-	if !cmd.Flags().Changed("message-window") && mcpConfig.MessageWindow != 0 {
-		messageWindow = mcpConfig.MessageWindow
-	}
 	if !cmd.Flags().Changed("debug") && mcpConfig.Debug {
 		debugMode = mcpConfig.Debug
 	}
 	if !cmd.Flags().Changed("system-prompt") && mcpConfig.SystemPrompt != "" {
 		systemPromptFile = mcpConfig.SystemPrompt
 	}
-	if !cmd.Flags().Changed("openai-api-key") && mcpConfig.OpenAIAPIKey != "" {
-		openaiAPIKey = mcpConfig.OpenAIAPIKey
+	if !cmd.Flags().Changed("provider-api-key") && mcpConfig.ProviderAPIKey != "" {
+		providerAPIKey = mcpConfig.ProviderAPIKey
 	}
-	if !cmd.Flags().Changed("anthropic-api-key") && mcpConfig.AnthropicAPIKey != "" {
-		anthropicAPIKey = mcpConfig.AnthropicAPIKey
+	if !cmd.Flags().Changed("provider-url") && mcpConfig.ProviderURL != "" {
+		providerURL = mcpConfig.ProviderURL
 	}
-	if !cmd.Flags().Changed("google-api-key") && mcpConfig.GoogleAPIKey != "" {
-		googleAPIKey = mcpConfig.GoogleAPIKey
+	if !cmd.Flags().Changed("max-tokens") && mcpConfig.MaxTokens != 0 {
+		maxTokens = mcpConfig.MaxTokens
 	}
-	if !cmd.Flags().Changed("openai-url") && mcpConfig.OpenAIURL != "" {
-		openaiBaseURL = mcpConfig.OpenAIURL
+	if !cmd.Flags().Changed("temperature") && mcpConfig.Temperature != nil {
+		temperature = *mcpConfig.Temperature
 	}
-	if !cmd.Flags().Changed("anthropic-url") && mcpConfig.AnthropicURL != "" {
-		anthropicBaseURL = mcpConfig.AnthropicURL
+	if !cmd.Flags().Changed("top-p") && mcpConfig.TopP != nil {
+		topP = *mcpConfig.TopP
+	}
+	if !cmd.Flags().Changed("top-k") && mcpConfig.TopK != nil {
+		topK = *mcpConfig.TopK
+	}
+	if !cmd.Flags().Changed("stop-sequences") && len(mcpConfig.StopSequences) > 0 {
+		stopSequences = mcpConfig.StopSequences
 	}
 }
 

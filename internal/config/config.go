@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -23,15 +24,18 @@ type Config struct {
 	MCPServers      map[string]MCPServerConfig `json:"mcpServers" yaml:"mcpServers"`
 	Model           string                     `json:"model,omitempty" yaml:"model,omitempty"`
 	MaxSteps        int                        `json:"max-steps,omitempty" yaml:"max-steps,omitempty"`
-	MessageWindow   int                        `json:"message-window,omitempty" yaml:"message-window,omitempty"`
 	Debug           bool                       `json:"debug,omitempty" yaml:"debug,omitempty"`
 	SystemPrompt    string                     `json:"system-prompt,omitempty" yaml:"system-prompt,omitempty"`
-	OpenAIAPIKey    string                     `json:"openai-api-key,omitempty" yaml:"openai-api-key,omitempty"`
-	AnthropicAPIKey string                     `json:"anthropic-api-key,omitempty" yaml:"anthropic-api-key,omitempty"`
-	GoogleAPIKey    string                     `json:"google-api-key,omitempty" yaml:"google-api-key,omitempty"`
-	OpenAIURL       string                     `json:"openai-url,omitempty" yaml:"openai-url,omitempty"`
-	AnthropicURL    string                     `json:"anthropic-url,omitempty" yaml:"anthropic-url,omitempty"`
+	ProviderAPIKey  string                     `json:"provider-api-key,omitempty" yaml:"provider-api-key,omitempty"`
+	ProviderURL     string                     `json:"provider-url,omitempty" yaml:"provider-url,omitempty"`
 	Prompt          string                     `json:"prompt,omitempty" yaml:"prompt,omitempty"`
+	
+	// Model generation parameters
+	MaxTokens     int      `json:"max-tokens,omitempty" yaml:"max-tokens,omitempty"`
+	Temperature   *float32 `json:"temperature,omitempty" yaml:"temperature,omitempty"`
+	TopP          *float32 `json:"top-p,omitempty" yaml:"top-p,omitempty"`
+	TopK          *int32   `json:"top-k,omitempty" yaml:"top-k,omitempty"`
+	StopSequences []string `json:"stop-sequences,omitempty" yaml:"stop-sequences,omitempty"`
 }
 
 // Validate validates the configuration
@@ -129,20 +133,12 @@ func LoadSystemPrompt(input string) (string, error) {
 
 	// Check if input is a file that exists
 	if _, err := os.Stat(input); err == nil {
-		// Treat as file path
-		v := viper.New()
-		v.SetConfigFile(input)
-
-		if err := v.ReadInConfig(); err != nil {
+		// Read the entire file as plain text
+		content, err := os.ReadFile(input)
+		if err != nil {
 			return "", fmt.Errorf("error reading system prompt file: %v", err)
 		}
-
-		systemPrompt := v.GetString("systemPrompt")
-		if systemPrompt == "" {
-			return "", fmt.Errorf("systemPrompt field not found in config file")
-		}
-
-		return systemPrompt, nil
+		return strings.TrimSpace(string(content)), nil
 	}
 
 	// Treat as direct string
@@ -180,16 +176,19 @@ mcpServers:
 # Application settings (all optional)
 # model: "anthropic:claude-sonnet-4-20250514"  # Default model to use
 # max-steps: 20                                # Maximum agent steps (0 for unlimited)
-# message-window: 40                           # Number of messages to keep in context
 # debug: false                                 # Enable debug logging
-# system-prompt: "/path/to/system-prompt.json" # System prompt file
+# system-prompt: "/path/to/system-prompt.txt" # System prompt text file
+
+# Model generation parameters (all optional)
+# max-tokens: 4096                             # Maximum tokens in response
+# temperature: 0.7                             # Randomness (0.0-1.0)
+# top-p: 0.95                                  # Nucleus sampling (0.0-1.0)
+# top-k: 40                                    # Top K sampling
+# stop-sequences: ["Human:", "Assistant:"]     # Custom stop sequences
 
 # API Configuration (can also use environment variables)
-# openai-api-key: "your-openai-key"
-# anthropic-api-key: "your-anthropic-key"  
-# google-api-key: "your-google-key"
-# openai-url: "https://api.openai.com/v1"
-# anthropic-url: "https://api.anthropic.com"
+# provider-api-key: "your-api-key"         # API key for OpenAI, Anthropic, or Google
+# provider-url: "https://api.openai.com/v1" # Base URL for OpenAI, Anthropic, or Ollama
 `
 
 	_, err = file.WriteString(content)

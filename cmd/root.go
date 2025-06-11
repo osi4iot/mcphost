@@ -22,16 +22,20 @@ var (
 	systemPromptFile string
 	messageWindow    int
 	modelFlag        string
-	openaiBaseURL    string
-	anthropicBaseURL string
-	openaiAPIKey     string
-	anthropicAPIKey  string
-	googleAPIKey     string
+	providerURL      string
+	providerAPIKey   string
 	debugMode        bool
 	promptFlag       string
 	quietFlag        bool
 	maxSteps         int
 	scriptMCPConfig  *config.Config // Used to override config in script mode
+	
+	// Model generation parameters
+	maxTokens     int
+	temperature   float32
+	topP          float32
+	topK          int32
+	stopSequences []string
 )
 
 var rootCmd = &cobra.Command{
@@ -75,9 +79,8 @@ func init() {
 	rootCmd.PersistentFlags().
 		StringVar(&configFile, "config", "", "config file (default is $HOME/.mcp.json)")
 	rootCmd.PersistentFlags().
-		StringVar(&systemPromptFile, "system-prompt", "", "system prompt text or path to system prompt json file")
-	rootCmd.PersistentFlags().
-		IntVar(&messageWindow, "message-window", 40, "number of messages to keep in context")
+		StringVar(&systemPromptFile, "system-prompt", "", "system prompt text or path to text file")
+
 	rootCmd.PersistentFlags().
 		StringVarP(&modelFlag, "model", "m", "anthropic:claude-sonnet-4-20250514",
 			"model to use (format: provider:model)")
@@ -91,29 +94,37 @@ func init() {
 		IntVar(&maxSteps, "max-steps", 0, "maximum number of agent steps (0 for unlimited)")
 
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&openaiBaseURL, "openai-url", "", "base URL for OpenAI API")
-	flags.StringVar(&anthropicBaseURL, "anthropic-url", "", "base URL for Anthropic API")
-	flags.StringVar(&openaiAPIKey, "openai-api-key", "", "OpenAI API key")
-	flags.StringVar(&anthropicAPIKey, "anthropic-api-key", "", "Anthropic API key")
-	flags.StringVar(&googleAPIKey, "google-api-key", "", "Google (Gemini) API key")
+	flags.StringVar(&providerURL, "provider-url", "", "base URL for the provider API (applies to OpenAI, Anthropic, Ollama, and Google)")
+	flags.StringVar(&providerAPIKey, "provider-api-key", "", "API key for the provider (applies to OpenAI, Anthropic, and Google)")
+
+	// Model generation parameters
+	flags.IntVar(&maxTokens, "max-tokens", 4096, "maximum number of tokens in the response")
+	flags.Float32Var(&temperature, "temperature", 0.7, "controls randomness in responses (0.0-1.0)")
+	flags.Float32Var(&topP, "top-p", 0.95, "controls diversity via nucleus sampling (0.0-1.0)")
+	flags.Int32Var(&topK, "top-k", 40, "controls diversity by limiting top K tokens to sample from")
+	flags.StringSliceVar(&stopSequences, "stop-sequences", nil, "custom stop sequences (comma-separated)")
 
 	// Bind flags to viper for config file support
 	viper.BindPFlag("system-prompt", rootCmd.PersistentFlags().Lookup("system-prompt"))
-	viper.BindPFlag("message-window", rootCmd.PersistentFlags().Lookup("message-window"))
 	viper.BindPFlag("model", rootCmd.PersistentFlags().Lookup("model"))
 	viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
 	viper.BindPFlag("max-steps", rootCmd.PersistentFlags().Lookup("max-steps"))
-	viper.BindPFlag("openai-url", rootCmd.PersistentFlags().Lookup("openai-url"))
-	viper.BindPFlag("anthropic-url", rootCmd.PersistentFlags().Lookup("anthropic-url"))
-	viper.BindPFlag("openai-api-key", rootCmd.PersistentFlags().Lookup("openai-api-key"))
-	viper.BindPFlag("anthropic-api-key", rootCmd.PersistentFlags().Lookup("anthropic-api-key"))
-	viper.BindPFlag("google-api-key", rootCmd.PersistentFlags().Lookup("google-api-key"))
+	viper.BindPFlag("provider-url", rootCmd.PersistentFlags().Lookup("provider-url"))
+	viper.BindPFlag("provider-api-key", rootCmd.PersistentFlags().Lookup("provider-api-key"))
+	viper.BindPFlag("max-tokens", rootCmd.PersistentFlags().Lookup("max-tokens"))
+	viper.BindPFlag("temperature", rootCmd.PersistentFlags().Lookup("temperature"))
+	viper.BindPFlag("top-p", rootCmd.PersistentFlags().Lookup("top-p"))
+	viper.BindPFlag("top-k", rootCmd.PersistentFlags().Lookup("top-k"))
+	viper.BindPFlag("stop-sequences", rootCmd.PersistentFlags().Lookup("stop-sequences"))
 
 	// Set defaults in viper (lowest precedence)
 	viper.SetDefault("model", "anthropic:claude-sonnet-4-20250514")
-	viper.SetDefault("message-window", 40)
 	viper.SetDefault("max-steps", 0)
 	viper.SetDefault("debug", false)
+	viper.SetDefault("max-tokens", 4096)
+	viper.SetDefault("temperature", 0.7)
+	viper.SetDefault("top-p", 0.95)
+	viper.SetDefault("top-k", 40)
 }
 
 func runMCPHost(ctx context.Context) error {
@@ -177,14 +188,15 @@ func runNormalMode(ctx context.Context) error {
 	// Get final values from viper (respects precedence: flag > config > default)
 	finalModel := viper.GetString("model")
 	finalSystemPrompt := viper.GetString("system-prompt")
-	finalMessageWindow := viper.GetInt("message-window")
 	finalDebug := viper.GetBool("debug")
 	finalMaxSteps := viper.GetInt("max-steps")
-	finalOpenAIURL := viper.GetString("openai-url")
-	finalAnthropicURL := viper.GetString("anthropic-url")
-	finalOpenAIKey := viper.GetString("openai-api-key")
-	finalAnthropicKey := viper.GetString("anthropic-api-key")
-	finalGoogleKey := viper.GetString("google-api-key")
+	finalProviderURL := viper.GetString("provider-url")
+	finalProviderAPIKey := viper.GetString("provider-api-key")
+	finalMaxTokens := viper.GetInt("max-tokens")
+	finalTemperature := float32(viper.GetFloat64("temperature"))
+	finalTopP := float32(viper.GetFloat64("top-p"))
+	finalTopK := int32(viper.GetInt("top-k"))
+	finalStopSequences := viper.GetStringSlice("stop-sequences")
 
 	// Update debug mode if it was set in config
 	if finalDebug && !debugMode {
@@ -199,27 +211,23 @@ func runNormalMode(ctx context.Context) error {
 
 	// Create model configuration
 	modelConfig := &models.ProviderConfig{
-		ModelString:      finalModel,
-		SystemPrompt:     systemPrompt,
-		AnthropicAPIKey:  finalAnthropicKey,
-		AnthropicBaseURL: finalAnthropicURL,
-		OpenAIAPIKey:     finalOpenAIKey,
-		OpenAIBaseURL:    finalOpenAIURL,
-		GoogleAPIKey:     finalGoogleKey,
+		ModelString:     finalModel,
+		SystemPrompt:    systemPrompt,
+		ProviderAPIKey:  finalProviderAPIKey,
+		ProviderURL:     finalProviderURL,
+		MaxTokens:       finalMaxTokens,
+		Temperature:     &finalTemperature,
+		TopP:            &finalTopP,
+		TopK:            &finalTopK,
+		StopSequences:   finalStopSequences,
 	}
 
 	// Create agent configuration
-	agentMaxSteps := finalMaxSteps
-	if agentMaxSteps == 0 {
-		agentMaxSteps = 1000 // Set a high limit for "unlimited"
-	}
-
 	agentConfig := &agent.AgentConfig{
-		ModelConfig:   modelConfig,
-		MCPConfig:     mcpConfig,
-		SystemPrompt:  systemPrompt,
-		MaxSteps:      agentMaxSteps,
-		MessageWindow: finalMessageWindow,
+		ModelConfig:  modelConfig,
+		MCPConfig:    mcpConfig,
+		SystemPrompt: systemPrompt,
+		MaxSteps:     finalMaxSteps, // Pass 0 for infinite, agent will handle it
 	}
 
 	// Create the agent
@@ -252,6 +260,32 @@ func runNormalMode(ctx context.Context) error {
 			cli.DisplayInfo(fmt.Sprintf("Model loaded: %s (%s)", parts[0], parts[1]))
 		}
 		cli.DisplayInfo(fmt.Sprintf("Loaded %d tools from MCP servers", len(tools)))
+
+		// Display debug configuration if debug mode is enabled
+		if finalDebug {
+			debugConfig := map[string]any{
+				"model":           finalModel,
+				"max-steps":       finalMaxSteps,
+				"max-tokens":      finalMaxTokens,
+				"temperature":     finalTemperature,
+				"top-p":           finalTopP,
+				"top-k":           finalTopK,
+				"provider-url":    finalProviderURL,
+				"system-prompt":   finalSystemPrompt,
+			}
+			
+			// Only include non-empty stop sequences
+			if len(finalStopSequences) > 0 {
+				debugConfig["stop-sequences"] = finalStopSequences
+			}
+			
+			// Only include API keys if they're set (but don't show the actual values for security)
+			if finalProviderAPIKey != "" {
+				debugConfig["provider-api-key"] = "[SET]"
+			}
+			
+			cli.DisplayDebugConfig(debugConfig)
+		}
 	}
 
 	// Prepare data for slash commands
