@@ -211,7 +211,7 @@ mcphost script myscript.sh --args:directory /tmp --args:name "John"
 
 #### Script Format
 
-Scripts combine YAML configuration with prompts in a single executable file. The configuration must be wrapped in frontmatter delimiters (`---`):
+Scripts combine YAML configuration with prompts in a single executable file. The configuration must be wrapped in frontmatter delimiters (`---`). You can either include the prompt in the YAML configuration or place it after the closing frontmatter delimiter:
 
 ```yaml
 #!/usr/local/bin/mcphost script
@@ -226,6 +226,22 @@ prompt: |
   Create 2 variations of a simple hello world app using Flask and FastAPI. 
   Each in their own environment. Give me the URL of each app
 ---
+```
+
+Or alternatively, omit the `prompt:` field and place the prompt after the frontmatter:
+
+```yaml
+#!/usr/local/bin/mcphost script
+---
+# This script uses the container-use MCP server from https://github.com/dagger/container-use
+mcpServers:
+  container-use:
+    command: cu
+    args:
+      - "stdio"
+---
+Create 2 variations of a simple hello world app using Flask and FastAPI. 
+Each in their own environment. Give me the URL of each app
 ```
 
 #### Variable Substitution
@@ -245,9 +261,8 @@ mcpServers:
   filesystem:
     command: npx
     args: ["-y", "@modelcontextprotocol/server-filesystem", "${directory}"]
-prompt: |
-  Hello ${name}! Please list the files in ${directory} and tell me about them.
 ---
+Hello ${name}! Please list the files in ${directory} and tell me about them.
 ```
 
 **Important**: All declared variables (e.g., `${directory}`, `${name}`) must be provided using `--args:variable value` syntax, or the script will exit with an error listing the missing variables.
