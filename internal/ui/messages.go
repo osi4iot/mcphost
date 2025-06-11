@@ -440,10 +440,12 @@ func (r *MessageRenderer) formatToolArgs(args string) string {
 		return "(no arguments)"
 	}
 
-	// Truncate if too long
-	maxLen := 100
-	if len(args) > maxLen {
-		return args[:maxLen] + "..."
+	// Truncate if too long, but skip truncation in debug mode
+	if !r.debug {
+		maxLen := 100
+		if len(args) > maxLen {
+			return args[:maxLen] + "..."
+		}
 	}
 
 	return args
@@ -477,6 +479,11 @@ func (r *MessageRenderer) formatToolResult(toolName, result string, width int) s
 
 // truncateText truncates text to fit within the specified width
 func (r *MessageRenderer) truncateText(text string, maxWidth int) string {
+	// In debug mode, don't truncate - just replace newlines with spaces
+	if r.debug {
+		return strings.ReplaceAll(text, "\n", " ")
+	}
+
 	// Replace newlines with spaces for single-line display
 	text = strings.ReplaceAll(text, "\n", " ")
 
