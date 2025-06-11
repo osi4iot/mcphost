@@ -27,10 +27,10 @@ type CLI struct {
 }
 
 // NewCLI creates a new CLI instance with message container
-func NewCLI() (*CLI, error) {
+func NewCLI(debug bool) (*CLI, error) {
 	cli := &CLI{}
 	cli.updateSize()
-	cli.messageRenderer = NewMessageRenderer(cli.width)
+	cli.messageRenderer = NewMessageRenderer(cli.width, debug)
 	cli.messageContainer = NewMessageContainer(cli.width, cli.height-4) // Reserve space for input and help
 
 	return cli, nil

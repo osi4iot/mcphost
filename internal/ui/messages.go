@@ -44,12 +44,14 @@ var (
 // MessageRenderer handles rendering of messages with proper styling
 type MessageRenderer struct {
 	width int
+	debug bool
 }
 
 // NewMessageRenderer creates a new message renderer
-func NewMessageRenderer(width int) *MessageRenderer {
+func NewMessageRenderer(width int, debug bool) *MessageRenderer {
 	return &MessageRenderer{
 		width: width,
+		debug: debug,
 	}
 }
 
@@ -451,11 +453,13 @@ func (r *MessageRenderer) formatToolArgs(args string) string {
 func (r *MessageRenderer) formatToolResult(toolName, result string, width int) string {
 	baseStyle := lipgloss.NewStyle()
 
-	// Truncate very long results
-	maxLines := 10
-	lines := strings.Split(result, "\n")
-	if len(lines) > maxLines {
-		result = strings.Join(lines[:maxLines], "\n") + "\n... (truncated)"
+	// Truncate very long results only if not in debug mode
+	if !r.debug {
+		maxLines := 10
+		lines := strings.Split(result, "\n")
+		if len(lines) > maxLines {
+			result = strings.Join(lines[:maxLines], "\n") + "\n... (truncated)"
+		}
 	}
 
 	// Format as code block for most tools

@@ -20,7 +20,6 @@ import (
 var (
 	configFile       string
 	systemPromptFile string
-	messageWindow    int
 	modelFlag        string
 	providerURL      string
 	providerAPIKey   string
@@ -250,7 +249,7 @@ func runNormalMode(ctx context.Context) error {
 	// Create CLI interface (skip if quiet mode)
 	var cli *ui.CLI
 	if !quietFlag {
-		cli, err = ui.NewCLI()
+		cli, err = ui.NewCLI(finalDebug)
 		if err != nil {
 			return fmt.Errorf("failed to create CLI: %v", err)
 		}
@@ -460,11 +459,6 @@ func runInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 
 		// Add user message to history
 		messages = append(messages, schema.UserMessage(prompt))
-
-		// Prune messages if needed
-		if len(messages) > messageWindow {
-			messages = messages[len(messages)-messageWindow:]
-		}
 
 		// Get agent response with controlled spinner that stops for tool call display
 		var response *schema.Message
