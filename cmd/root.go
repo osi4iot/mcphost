@@ -29,7 +29,7 @@ var (
 	quietFlag        bool
 	maxSteps         int
 	scriptMCPConfig  *config.Config // Used to override config in script mode
-	
+
 	// Model generation parameters
 	maxTokens     int
 	temperature   float32
@@ -211,15 +211,15 @@ func runNormalMode(ctx context.Context) error {
 
 	// Create model configuration
 	modelConfig := &models.ProviderConfig{
-		ModelString:     finalModel,
-		SystemPrompt:    systemPrompt,
-		ProviderAPIKey:  finalProviderAPIKey,
-		ProviderURL:     finalProviderURL,
-		MaxTokens:       finalMaxTokens,
-		Temperature:     &finalTemperature,
-		TopP:            &finalTopP,
-		TopK:            &finalTopK,
-		StopSequences:   finalStopSequences,
+		ModelString:    finalModel,
+		SystemPrompt:   systemPrompt,
+		ProviderAPIKey: finalProviderAPIKey,
+		ProviderURL:    finalProviderURL,
+		MaxTokens:      finalMaxTokens,
+		Temperature:    &finalTemperature,
+		TopP:           &finalTopP,
+		TopK:           &finalTopK,
+		StopSequences:  finalStopSequences,
 	}
 
 	// Create agent configuration
@@ -264,26 +264,26 @@ func runNormalMode(ctx context.Context) error {
 		// Display debug configuration if debug mode is enabled
 		if finalDebug {
 			debugConfig := map[string]any{
-				"model":           finalModel,
-				"max-steps":       finalMaxSteps,
-				"max-tokens":      finalMaxTokens,
-				"temperature":     finalTemperature,
-				"top-p":           finalTopP,
-				"top-k":           finalTopK,
-				"provider-url":    finalProviderURL,
-				"system-prompt":   finalSystemPrompt,
+				"model":         finalModel,
+				"max-steps":     finalMaxSteps,
+				"max-tokens":    finalMaxTokens,
+				"temperature":   finalTemperature,
+				"top-p":         finalTopP,
+				"top-k":         finalTopK,
+				"provider-url":  finalProviderURL,
+				"system-prompt": finalSystemPrompt,
 			}
-			
+
 			// Only include non-empty stop sequences
 			if len(finalStopSequences) > 0 {
 				debugConfig["stop-sequences"] = finalStopSequences
 			}
-			
+
 			// Only include API keys if they're set (but don't show the actual values for security)
 			if finalProviderAPIKey != "" {
 				debugConfig["provider-api-key"] = "[SET]"
 			}
-			
+
 			cli.DisplayDebugConfig(debugConfig)
 		}
 	}
@@ -545,5 +545,3 @@ func runInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 		messages = append(messages, response)
 	}
 }
-
-

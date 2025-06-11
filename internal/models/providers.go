@@ -22,7 +22,7 @@ type ProviderConfig struct {
 	SystemPrompt   string
 	ProviderAPIKey string // API key for OpenAI and Anthropic
 	ProviderURL    string // Base URL for OpenAI, Anthropic, and Ollama
-	
+
 	// Model generation parameters
 	MaxTokens     int
 	Temperature   *float32
@@ -181,12 +181,12 @@ func createGoogleProvider(ctx context.Context, config *ProviderConfig, modelName
 
 func createOllamaProvider(ctx context.Context, config *ProviderConfig, modelName string) (model.ToolCallingChatModel, error) {
 	baseURL := "http://localhost:11434" // Default Ollama URL
-	
+
 	// Check for custom Ollama host from environment
 	if host := os.Getenv("OLLAMA_HOST"); host != "" {
 		baseURL = host
 	}
-	
+
 	// Override with ProviderURL if provided
 	if config.ProviderURL != "" {
 		baseURL = config.ProviderURL
@@ -199,7 +199,7 @@ func createOllamaProvider(ctx context.Context, config *ProviderConfig, modelName
 
 	// Set up options for Ollama using the api.Options struct
 	options := &api.Options{}
-	
+
 	if config.Temperature != nil {
 		options.Temperature = *config.Temperature
 	}

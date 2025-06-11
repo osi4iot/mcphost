@@ -16,9 +16,9 @@ import (
 
 // MCPToolManager manages MCP tools and clients
 type MCPToolManager struct {
-	clients   map[string]client.MCPClient
-	tools     []tool.BaseTool
-	toolMap   map[string]*toolMapping // maps prefixed tool names to their server and original name
+	clients map[string]client.MCPClient
+	tools   []tool.BaseTool
+	toolMap map[string]*toolMapping // maps prefixed tool names to their server and original name
 }
 
 // toolMapping stores the mapping between prefixed tool names and their original details
@@ -30,8 +30,8 @@ type toolMapping struct {
 
 // mcpToolImpl implements the eino tool interface with server prefixing
 type mcpToolImpl struct {
-	info      *schema.ToolInfo
-	mapping   *toolMapping
+	info    *schema.ToolInfo
+	mapping *toolMapping
 }
 
 // NewMCPToolManager creates a new MCP tool manager

@@ -47,17 +47,17 @@ This will replace ${directory} with "/tmp" and ${name} with "John" in the script
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		scriptFile := args[0]
-		
+
 		// Parse custom variables from unknown flags
 		variables := parseCustomVariables(cmd)
-		
+
 		return runScriptCommand(context.Background(), scriptFile, variables, cmd)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(scriptCmd)
-	
+
 	// Add the same flags as the root command, but they will override script settings
 	scriptCmd.Flags().StringVar(&systemPromptFile, "system-prompt", "", "system prompt text or path to text file")
 	scriptCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "model to use (format: provider:model)")
@@ -67,7 +67,7 @@ func init() {
 	scriptCmd.Flags().IntVar(&maxSteps, "max-steps", 0, "maximum number of agent steps (0 for unlimited)")
 	scriptCmd.Flags().StringVar(&providerURL, "provider-url", "", "base URL for the provider API (applies to OpenAI, Anthropic, Ollama, and Google)")
 	scriptCmd.Flags().StringVar(&providerAPIKey, "provider-api-key", "", "API key for the provider (applies to OpenAI, Anthropic, and Google)")
-	
+
 	// Model generation parameters
 	scriptCmd.Flags().IntVar(&maxTokens, "max-tokens", 4096, "maximum number of tokens in the response")
 	scriptCmd.Flags().Float32Var(&temperature, "temperature", 0.7, "controls randomness in responses (0.0-1.0)")
@@ -79,10 +79,10 @@ func init() {
 // parseCustomVariables extracts custom variables from command line arguments
 func parseCustomVariables(_ *cobra.Command) map[string]string {
 	variables := make(map[string]string)
-	
+
 	// Get all arguments passed to the command
 	args := os.Args[1:] // Skip program name
-	
+
 	// Find the script subcommand position
 	scriptPos := -1
 	for i, arg := range args {
@@ -91,34 +91,34 @@ func parseCustomVariables(_ *cobra.Command) map[string]string {
 			break
 		}
 	}
-	
+
 	if scriptPos == -1 {
 		return variables
 	}
-	
+
 	// Parse arguments after the script file
 	scriptFileFound := false
-	
+
 	for i := scriptPos + 1; i < len(args); i++ {
 		arg := args[i]
-		
+
 		// Skip the script file argument (first non-flag after "script")
 		if !scriptFileFound && !strings.HasPrefix(arg, "-") {
 			scriptFileFound = true
 			continue
 		}
-		
+
 		// Parse custom variables with --args: prefix
 		if strings.HasPrefix(arg, "--args:") {
 			varName := strings.TrimPrefix(arg, "--args:")
 			if varName == "" {
 				continue // Skip malformed --args: without name
 			}
-			
+
 			// Check if we have a value
 			if i+1 < len(args) {
 				varValue := args[i+1]
-				
+
 				// Make sure the next arg isn't a flag
 				if !strings.HasPrefix(varValue, "-") {
 					variables[varName] = varValue
@@ -133,10 +133,9 @@ func parseCustomVariables(_ *cobra.Command) map[string]string {
 			}
 		}
 	}
-	
+
 	return variables
 }
-
 
 func runScriptCommand(ctx context.Context, scriptFile string, variables map[string]string, cmd *cobra.Command) error {
 	// Parse the script file
@@ -245,7 +244,7 @@ func mergeScriptConfig(mcpConfig *config.Config, scriptConfig *config.Config) {
 func applyScriptFlags(mcpConfig *config.Config, cmd *cobra.Command) {
 	// For scripts, we need to respect: flag > script > config > default
 	// We can use cobra's Changed() method to detect if flags were explicitly set
-	
+
 	// Only apply script values if the corresponding flag wasn't explicitly set
 	if !cmd.Flags().Changed("prompt") && mcpConfig.Prompt != "" {
 		promptFlag = mcpConfig.Prompt
@@ -324,10 +323,10 @@ func parseScriptContent(content string, variables map[string]string) (*config.Co
 	if err := validateVariables(content, variables); err != nil {
 		return nil, err
 	}
-	
+
 	// Substitute variables in the content
 	content = substituteVariables(content, variables)
-	
+
 	lines := strings.Split(content, "\n")
 
 	// Find YAML frontmatter between --- delimiters
@@ -339,12 +338,12 @@ func parseScriptContent(content string, variables map[string]string) (*config.Co
 
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		
+
 		// Skip comment lines (lines starting with #)
 		if strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		
+
 		// Check for frontmatter start
 		if trimmed == "---" && !inFrontmatter {
 			// Start of frontmatter
@@ -352,7 +351,7 @@ func parseScriptContent(content string, variables map[string]string) (*config.Co
 			foundFrontmatter = true
 			continue
 		}
-		
+
 		// Check for frontmatter end
 		if trimmed == "---" && inFrontmatter {
 			// End of frontmatter
@@ -360,7 +359,7 @@ func parseScriptContent(content string, variables map[string]string) (*config.Co
 			frontmatterEnd = i + 1
 			continue
 		}
-		
+
 		// Collect frontmatter lines
 		if inFrontmatter {
 			yamlLines = append(yamlLines, line)
@@ -385,8 +384,6 @@ func parseScriptContent(content string, variables map[string]string) (*config.Co
 		}
 	}
 
-
-
 	// Set prompt from content after frontmatter
 	if len(promptLines) > 0 {
 		prompt := strings.Join(promptLines, "\n")
@@ -403,10 +400,10 @@ func parseScriptContent(content string, variables map[string]string) (*config.Co
 func findVariables(content string) []string {
 	re := regexp.MustCompile(`\$\{([^}]+)\}`)
 	matches := re.FindAllStringSubmatch(content, -1)
-	
+
 	seenVars := make(map[string]bool)
 	var variables []string
-	
+
 	for _, match := range matches {
 		if len(match) > 1 {
 			varName := match[1]
@@ -416,43 +413,42 @@ func findVariables(content string) []string {
 			}
 		}
 	}
-	
+
 	return variables
 }
 
 // validateVariables checks that all declared variables in the content are provided
 func validateVariables(content string, variables map[string]string) error {
 	declaredVars := findVariables(content)
-	
+
 	var missingVars []string
 	for _, varName := range declaredVars {
 		if _, exists := variables[varName]; !exists {
 			missingVars = append(missingVars, varName)
 		}
 	}
-	
+
 	if len(missingVars) > 0 {
 		return fmt.Errorf("missing required variables: %s\nProvide them using --args:variable value syntax", strings.Join(missingVars, ", "))
 	}
-	
+
 	return nil
 }
 
 // substituteVariables replaces ${variable} patterns with their values
 func substituteVariables(content string, variables map[string]string) string {
 	re := regexp.MustCompile(`\$\{([^}]+)\}`)
-	
+
 	return re.ReplaceAllStringFunc(content, func(match string) string {
 		// Extract variable name (remove ${ and })
 		varName := match[2 : len(match)-1]
-		
+
 		// Look up the variable value
 		if value, exists := variables[varName]; exists {
 			return value
 		}
-		
+
 		// If variable not found, leave it as is
 		return match
 	})
 }
-

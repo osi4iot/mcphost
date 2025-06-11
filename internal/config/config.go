@@ -21,15 +21,15 @@ type MCPServerConfig struct {
 
 // Config represents the application configuration
 type Config struct {
-	MCPServers      map[string]MCPServerConfig `json:"mcpServers" yaml:"mcpServers"`
-	Model           string                     `json:"model,omitempty" yaml:"model,omitempty"`
-	MaxSteps        int                        `json:"max-steps,omitempty" yaml:"max-steps,omitempty"`
-	Debug           bool                       `json:"debug,omitempty" yaml:"debug,omitempty"`
-	SystemPrompt    string                     `json:"system-prompt,omitempty" yaml:"system-prompt,omitempty"`
-	ProviderAPIKey  string                     `json:"provider-api-key,omitempty" yaml:"provider-api-key,omitempty"`
-	ProviderURL     string                     `json:"provider-url,omitempty" yaml:"provider-url,omitempty"`
-	Prompt          string                     `json:"prompt,omitempty" yaml:"prompt,omitempty"`
-	
+	MCPServers     map[string]MCPServerConfig `json:"mcpServers" yaml:"mcpServers"`
+	Model          string                     `json:"model,omitempty" yaml:"model,omitempty"`
+	MaxSteps       int                        `json:"max-steps,omitempty" yaml:"max-steps,omitempty"`
+	Debug          bool                       `json:"debug,omitempty" yaml:"debug,omitempty"`
+	SystemPrompt   string                     `json:"system-prompt,omitempty" yaml:"system-prompt,omitempty"`
+	ProviderAPIKey string                     `json:"provider-api-key,omitempty" yaml:"provider-api-key,omitempty"`
+	ProviderURL    string                     `json:"provider-url,omitempty" yaml:"provider-url,omitempty"`
+	Prompt         string                     `json:"prompt,omitempty" yaml:"prompt,omitempty"`
+
 	// Model generation parameters
 	MaxTokens     int      `json:"max-tokens,omitempty" yaml:"max-tokens,omitempty"`
 	Temperature   *float32 `json:"temperature,omitempty" yaml:"temperature,omitempty"`
