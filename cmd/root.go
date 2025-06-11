@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -16,7 +15,6 @@ import (
 	"github.com/mark3labs/mcphost/internal/ui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -32,7 +30,6 @@ var (
 	debugMode        bool
 	promptFlag       string
 	quietFlag        bool
-	scriptFlag       bool
 	maxSteps         int
 	scriptMCPConfig  *config.Config // Used to override config in script mode
 )
@@ -61,8 +58,7 @@ Examples:
   mcphost -p "Calculate 15 * 23" --quiet
   
   # Script mode
-  mcphost --script myscript.sh
-  ./myscript.sh  # if script has shebang #!/path/to/mcphost --script`,
+  mcphost script myscript.sh`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMCPHost(context.Background())
 	},
@@ -92,8 +88,6 @@ func init() {
 	rootCmd.PersistentFlags().
 		BoolVar(&quietFlag, "quiet", false, "suppress all output (only works with --prompt)")
 	rootCmd.PersistentFlags().
-		BoolVar(&scriptFlag, "script", false, "run in script mode (parse YAML frontmatter and prompt from file)")
-	rootCmd.PersistentFlags().
 		IntVar(&maxSteps, "max-steps", 0, "maximum number of agent steps (0 for unlimited)")
 
 	flags := rootCmd.PersistentFlags()
@@ -114,14 +108,15 @@ func init() {
 	viper.BindPFlag("openai-api-key", rootCmd.PersistentFlags().Lookup("openai-api-key"))
 	viper.BindPFlag("anthropic-api-key", rootCmd.PersistentFlags().Lookup("anthropic-api-key"))
 	viper.BindPFlag("google-api-key", rootCmd.PersistentFlags().Lookup("google-api-key"))
+
+	// Set defaults in viper (lowest precedence)
+	viper.SetDefault("model", "anthropic:claude-sonnet-4-20250514")
+	viper.SetDefault("message-window", 40)
+	viper.SetDefault("max-steps", 0)
+	viper.SetDefault("debug", false)
 }
 
 func runMCPHost(ctx context.Context) error {
-	// Handle script mode
-	if scriptFlag {
-		return runScriptMode(ctx)
-	}
-
 	return runNormalMode(ctx)
 }
 
@@ -179,56 +174,42 @@ func runNormalMode(ctx context.Context) error {
 		viper.ReadInConfig() // Ignore error if file doesn't exist
 	}
 
-	// Override flag values with config file values (using viper's bound values)
-	if viper.GetString("system-prompt") != "" {
-		systemPromptFile = viper.GetString("system-prompt")
-	}
-	if viper.GetInt("message-window") != 0 {
-		messageWindow = viper.GetInt("message-window")
-	}
-	if viper.GetString("model") != "" {
-		modelFlag = viper.GetString("model")
-	}
-	if viper.GetBool("debug") {
-		debugMode = viper.GetBool("debug")
-	}
-	if viper.GetInt("max-steps") != 0 {
-		maxSteps = viper.GetInt("max-steps")
-	}
-	if viper.GetString("openai-url") != "" {
-		openaiBaseURL = viper.GetString("openai-url")
-	}
-	if viper.GetString("anthropic-url") != "" {
-		anthropicBaseURL = viper.GetString("anthropic-url")
-	}
-	if viper.GetString("openai-api-key") != "" {
-		openaiAPIKey = viper.GetString("openai-api-key")
-	}
-	if viper.GetString("anthropic-api-key") != "" {
-		anthropicAPIKey = viper.GetString("anthropic-api-key")
-	}
-	if viper.GetString("google-api-key") != "" {
-		googleAPIKey = viper.GetString("google-api-key")
+	// Get final values from viper (respects precedence: flag > config > default)
+	finalModel := viper.GetString("model")
+	finalSystemPrompt := viper.GetString("system-prompt")
+	finalMessageWindow := viper.GetInt("message-window")
+	finalDebug := viper.GetBool("debug")
+	finalMaxSteps := viper.GetInt("max-steps")
+	finalOpenAIURL := viper.GetString("openai-url")
+	finalAnthropicURL := viper.GetString("anthropic-url")
+	finalOpenAIKey := viper.GetString("openai-api-key")
+	finalAnthropicKey := viper.GetString("anthropic-api-key")
+	finalGoogleKey := viper.GetString("google-api-key")
+
+	// Update debug mode if it was set in config
+	if finalDebug && !debugMode {
+		debugMode = finalDebug
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	}
 
-	systemPrompt, err := config.LoadSystemPrompt(systemPromptFile)
+	systemPrompt, err := config.LoadSystemPrompt(finalSystemPrompt)
 	if err != nil {
 		return fmt.Errorf("failed to load system prompt: %v", err)
 	}
 
 	// Create model configuration
 	modelConfig := &models.ProviderConfig{
-		ModelString:      modelFlag,
+		ModelString:      finalModel,
 		SystemPrompt:     systemPrompt,
-		AnthropicAPIKey:  anthropicAPIKey,
-		AnthropicBaseURL: anthropicBaseURL,
-		OpenAIAPIKey:     openaiAPIKey,
-		OpenAIBaseURL:    openaiBaseURL,
-		GoogleAPIKey:     googleAPIKey,
+		AnthropicAPIKey:  finalAnthropicKey,
+		AnthropicBaseURL: finalAnthropicURL,
+		OpenAIAPIKey:     finalOpenAIKey,
+		OpenAIBaseURL:    finalOpenAIURL,
+		GoogleAPIKey:     finalGoogleKey,
 	}
 
 	// Create agent configuration
-	agentMaxSteps := maxSteps
+	agentMaxSteps := finalMaxSteps
 	if agentMaxSteps == 0 {
 		agentMaxSteps = 1000 // Set a high limit for "unlimited"
 	}
@@ -238,7 +219,7 @@ func runNormalMode(ctx context.Context) error {
 		MCPConfig:     mcpConfig,
 		SystemPrompt:  systemPrompt,
 		MaxSteps:      agentMaxSteps,
-		MessageWindow: messageWindow,
+		MessageWindow: finalMessageWindow,
 	}
 
 	// Create the agent
@@ -249,7 +230,7 @@ func runNormalMode(ctx context.Context) error {
 	defer mcpAgent.Close()
 
 	// Get model name for display
-	parts := strings.SplitN(modelFlag, ":", 2)
+	parts := strings.SplitN(finalModel, ":", 2)
 	modelName := "Unknown"
 	if len(parts) == 2 {
 		modelName = parts[1]
@@ -531,210 +512,4 @@ func runInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 	}
 }
 
-// runScriptMode handles script mode execution
-func runScriptMode(ctx context.Context) error {
-	var scriptFile string
 
-	// Determine script file from arguments
-	// When called via shebang, the script file is the first non-flag argument
-	// When called with --script flag, we need to find the script file in args
-	args := os.Args[1:]
-
-	// Filter out flags to find the script file
-	for _, arg := range args {
-		if arg == "--script" {
-			// Skip the --script flag itself
-			continue
-		}
-		if strings.HasPrefix(arg, "-") {
-			// Skip other flags
-			continue
-		}
-		// This should be our script file
-		scriptFile = arg
-		break
-	}
-
-	if scriptFile == "" {
-		return fmt.Errorf("script mode requires a script file argument")
-	}
-
-	// Parse the script file
-	scriptConfig, err := parseScriptFile(scriptFile)
-	if err != nil {
-		return fmt.Errorf("failed to parse script file: %v", err)
-	}
-
-	// Override the global configFile and promptFlag with script values
-	originalConfigFile := configFile
-	originalPromptFlag := promptFlag
-	originalModelFlag := modelFlag
-	originalMaxSteps := maxSteps
-	originalMessageWindow := messageWindow
-	originalDebugMode := debugMode
-	originalSystemPromptFile := systemPromptFile
-	originalOpenAIAPIKey := openaiAPIKey
-	originalAnthropicAPIKey := anthropicAPIKey
-	originalGoogleAPIKey := googleAPIKey
-	originalOpenAIURL := openaiBaseURL
-	originalAnthropicURL := anthropicBaseURL
-
-	// Create config from script or load normal config
-	var mcpConfig *config.Config
-	if len(scriptConfig.MCPServers) > 0 {
-		// Use servers from script
-		mcpConfig = scriptConfig
-	} else {
-		// Fall back to normal config loading
-		mcpConfig, err = config.LoadMCPConfig(configFile)
-		if err != nil {
-			return fmt.Errorf("failed to load MCP config: %v", err)
-		}
-		// Merge script config values into loaded config
-		if scriptConfig.Model != "" {
-			mcpConfig.Model = scriptConfig.Model
-		}
-		if scriptConfig.MaxSteps != 0 {
-			mcpConfig.MaxSteps = scriptConfig.MaxSteps
-		}
-		if scriptConfig.MessageWindow != 0 {
-			mcpConfig.MessageWindow = scriptConfig.MessageWindow
-		}
-		if scriptConfig.Debug {
-			mcpConfig.Debug = scriptConfig.Debug
-		}
-		if scriptConfig.SystemPrompt != "" {
-			mcpConfig.SystemPrompt = scriptConfig.SystemPrompt
-		}
-		if scriptConfig.OpenAIAPIKey != "" {
-			mcpConfig.OpenAIAPIKey = scriptConfig.OpenAIAPIKey
-		}
-		if scriptConfig.AnthropicAPIKey != "" {
-			mcpConfig.AnthropicAPIKey = scriptConfig.AnthropicAPIKey
-		}
-		if scriptConfig.GoogleAPIKey != "" {
-			mcpConfig.GoogleAPIKey = scriptConfig.GoogleAPIKey
-		}
-		if scriptConfig.OpenAIURL != "" {
-			mcpConfig.OpenAIURL = scriptConfig.OpenAIURL
-		}
-		if scriptConfig.AnthropicURL != "" {
-			mcpConfig.AnthropicURL = scriptConfig.AnthropicURL
-		}
-		if scriptConfig.Prompt != "" {
-			mcpConfig.Prompt = scriptConfig.Prompt
-		}
-	}
-
-	// Override the global config for normal mode
-	scriptMCPConfig = mcpConfig
-
-	// Apply script configuration to global flags
-	if mcpConfig.Prompt != "" {
-		promptFlag = mcpConfig.Prompt
-	}
-	if mcpConfig.Model != "" {
-		modelFlag = mcpConfig.Model
-	}
-	if mcpConfig.MaxSteps != 0 {
-		maxSteps = mcpConfig.MaxSteps
-	}
-	if mcpConfig.MessageWindow != 0 {
-		messageWindow = mcpConfig.MessageWindow
-	}
-	if mcpConfig.Debug {
-		debugMode = mcpConfig.Debug
-	}
-	if mcpConfig.SystemPrompt != "" {
-		systemPromptFile = mcpConfig.SystemPrompt
-	}
-	if mcpConfig.OpenAIAPIKey != "" {
-		openaiAPIKey = mcpConfig.OpenAIAPIKey
-	}
-	if mcpConfig.AnthropicAPIKey != "" {
-		anthropicAPIKey = mcpConfig.AnthropicAPIKey
-	}
-	if mcpConfig.GoogleAPIKey != "" {
-		googleAPIKey = mcpConfig.GoogleAPIKey
-	}
-	if mcpConfig.OpenAIURL != "" {
-		openaiBaseURL = mcpConfig.OpenAIURL
-	}
-	if mcpConfig.AnthropicURL != "" {
-		anthropicBaseURL = mcpConfig.AnthropicURL
-	}
-
-	// Restore original values after execution
-	defer func() {
-		configFile = originalConfigFile
-		promptFlag = originalPromptFlag
-		modelFlag = originalModelFlag
-		maxSteps = originalMaxSteps
-		messageWindow = originalMessageWindow
-		debugMode = originalDebugMode
-		systemPromptFile = originalSystemPromptFile
-		openaiAPIKey = originalOpenAIAPIKey
-		anthropicAPIKey = originalAnthropicAPIKey
-		googleAPIKey = originalGoogleAPIKey
-		openaiBaseURL = originalOpenAIURL
-		anthropicBaseURL = originalAnthropicURL
-		scriptMCPConfig = nil
-	}()
-
-	// Now run the normal execution path which will use our overridden config
-	return runNormalMode(ctx)
-}
-
-// parseScriptFile parses a script file with YAML frontmatter and returns config
-func parseScriptFile(filename string) (*config.Config, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-
-	// Skip shebang line if present
-	if scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "#!") {
-			// If it's not a shebang, we need to process this line
-			return parseScriptContent(line + "\n" + readRemainingLines(scanner))
-		}
-	}
-
-	// Read the rest of the file
-	content := readRemainingLines(scanner)
-	return parseScriptContent(content)
-}
-
-// readRemainingLines reads all remaining lines from a scanner
-func readRemainingLines(scanner *bufio.Scanner) string {
-	var lines []string
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	return strings.Join(lines, "\n")
-}
-
-// parseScriptContent parses the content to extract YAML frontmatter
-func parseScriptContent(content string) (*config.Config, error) {
-	lines := strings.Split(content, "\n")
-
-	// Find YAML frontmatter
-	var yamlLines []string
-
-	for _, line := range lines {
-		yamlLines = append(yamlLines, line)
-	}
-
-	// Parse YAML
-	yamlContent := strings.Join(yamlLines, "\n")
-	var scriptConfig config.Config
-	if err := yaml.Unmarshal([]byte(yamlContent), &scriptConfig); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML: %v", err)
-	}
-
-	return &scriptConfig, nil
-}
