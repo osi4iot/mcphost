@@ -35,6 +35,10 @@ var (
 	topP          float32
 	topK          int32
 	stopSequences []string
+
+	// Ollama-specific parameters
+	numGPU  int32
+	mainGPU int32
 )
 
 var rootCmd = &cobra.Command{
@@ -103,6 +107,10 @@ func init() {
 	flags.Int32Var(&topK, "top-k", 40, "controls diversity by limiting top K tokens to sample from")
 	flags.StringSliceVar(&stopSequences, "stop-sequences", nil, "custom stop sequences (comma-separated)")
 
+	// Ollama-specific parameters
+	flags.Int32Var(&numGPU, "num-gpu", 1, "number of GPUs to use for Ollama models")
+	flags.Int32Var(&mainGPU, "main-gpu", 0, "main GPU to use for Ollama models")
+
 	// Bind flags to viper for config file support
 	viper.BindPFlag("system-prompt", rootCmd.PersistentFlags().Lookup("system-prompt"))
 	viper.BindPFlag("model", rootCmd.PersistentFlags().Lookup("model"))
@@ -115,6 +123,8 @@ func init() {
 	viper.BindPFlag("top-p", rootCmd.PersistentFlags().Lookup("top-p"))
 	viper.BindPFlag("top-k", rootCmd.PersistentFlags().Lookup("top-k"))
 	viper.BindPFlag("stop-sequences", rootCmd.PersistentFlags().Lookup("stop-sequences"))
+	viper.BindPFlag("num-gpu", rootCmd.PersistentFlags().Lookup("num-gpu"))
+	viper.BindPFlag("main-gpu", rootCmd.PersistentFlags().Lookup("main-gpu"))
 
 	// Set defaults in viper (lowest precedence)
 	viper.SetDefault("model", "anthropic:claude-sonnet-4-20250514")
@@ -124,6 +134,8 @@ func init() {
 	viper.SetDefault("temperature", 0.7)
 	viper.SetDefault("top-p", 0.95)
 	viper.SetDefault("top-k", 40)
+	viper.SetDefault("num-gpu", 1)
+	viper.SetDefault("main-gpu", 0)
 }
 
 func runMCPHost(ctx context.Context) error {
@@ -196,6 +208,8 @@ func runNormalMode(ctx context.Context) error {
 	finalTopP := float32(viper.GetFloat64("top-p"))
 	finalTopK := int32(viper.GetInt("top-k"))
 	finalStopSequences := viper.GetStringSlice("stop-sequences")
+	finalNumGPU := int32(viper.GetInt("num-gpu"))
+	finalMainGPU := int32(viper.GetInt("main-gpu"))
 
 	// Update debug mode if it was set in config
 	if finalDebug && !debugMode {
@@ -219,6 +233,8 @@ func runNormalMode(ctx context.Context) error {
 		TopP:           &finalTopP,
 		TopK:           &finalTopK,
 		StopSequences:  finalStopSequences,
+		NumGPU:         &finalNumGPU,
+		MainGPU:        &finalMainGPU,
 	}
 
 	// Create agent configuration
@@ -271,6 +287,12 @@ func runNormalMode(ctx context.Context) error {
 				"top-k":         finalTopK,
 				"provider-url":  finalProviderURL,
 				"system-prompt": finalSystemPrompt,
+			}
+
+			// Add Ollama-specific parameters if using Ollama
+			if strings.HasPrefix(finalModel, "ollama:") {
+				debugConfig["num-gpu"] = finalNumGPU
+				debugConfig["main-gpu"] = finalMainGPU
 			}
 
 			// Only include non-empty stop sequences

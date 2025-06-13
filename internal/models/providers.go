@@ -29,6 +29,10 @@ type ProviderConfig struct {
 	TopP          *float32
 	TopK          *int32
 	StopSequences []string
+
+	// Ollama-specific parameters
+	NumGPU  *int32
+	MainGPU *int32
 }
 
 // CreateProvider creates an eino ToolCallingChatModel based on the provider configuration
@@ -218,6 +222,15 @@ func createOllamaProvider(ctx context.Context, config *ProviderConfig, modelName
 
 	if config.MaxTokens > 0 {
 		options.NumPredict = config.MaxTokens
+	}
+
+	// Set GPU configuration for Ollama
+	if config.NumGPU != nil {
+		options.NumGPU = int(*config.NumGPU)
+	}
+
+	if config.MainGPU != nil {
+		options.MainGPU = int(*config.MainGPU)
 	}
 
 	ollamaConfig.Options = options
