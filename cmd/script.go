@@ -10,6 +10,7 @@ import (
 
 	"github.com/mark3labs/mcphost/internal/config"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
@@ -144,20 +145,7 @@ func runScriptCommand(ctx context.Context, scriptFile string, variables map[stri
 		return fmt.Errorf("failed to parse script file: %v", err)
 	}
 
-	// Store original flag values
-	originalConfigFile := configFile
-	originalPromptFlag := promptFlag
-	originalModelFlag := modelFlag
-	originalMaxSteps := maxSteps
-	originalDebugMode := debugMode
-	originalSystemPromptFile := systemPromptFile
-	originalProviderAPIKey := providerAPIKey
-	originalProviderURL := providerURL
-	originalMaxTokens := maxTokens
-	originalTemperature := temperature
-	originalTopP := topP
-	originalTopK := topK
-	originalStopSequences := stopSequences
+
 
 	// Create config from script or load normal config
 	var mcpConfig *config.Config
@@ -177,24 +165,16 @@ func runScriptCommand(ctx context.Context, scriptFile string, variables map[stri
 	// Override the global config for normal mode
 	scriptMCPConfig = mcpConfig
 
-	// Apply script configuration to global flags (only if not overridden by command flags)
-	applyScriptFlags(mcpConfig, cmd)
+	// Set script values in viper (they will have same precedence as config file)
+	setScriptValuesInViper(mcpConfig)
 
-	// Restore original values after execution
+	// Set the prompt flag if it was specified in the script and not overridden by command line
+	if mcpConfig.Prompt != "" && promptFlag == "" {
+		promptFlag = mcpConfig.Prompt
+	}
+
+	// Clean up script config after execution
 	defer func() {
-		configFile = originalConfigFile
-		promptFlag = originalPromptFlag
-		modelFlag = originalModelFlag
-		maxSteps = originalMaxSteps
-		debugMode = originalDebugMode
-		systemPromptFile = originalSystemPromptFile
-		providerAPIKey = originalProviderAPIKey
-		providerURL = originalProviderURL
-		maxTokens = originalMaxTokens
-		temperature = originalTemperature
-		topP = originalTopP
-		topK = originalTopK
-		stopSequences = originalStopSequences
 		scriptMCPConfig = nil
 	}()
 
@@ -241,46 +221,44 @@ func mergeScriptConfig(mcpConfig *config.Config, scriptConfig *config.Config) {
 	}
 }
 
-func applyScriptFlags(mcpConfig *config.Config, cmd *cobra.Command) {
-	// For scripts, we need to respect: flag > script > config > default
-	// We can use cobra's Changed() method to detect if flags were explicitly set
-
-	// Only apply script values if the corresponding flag wasn't explicitly set
-	if !cmd.Flags().Changed("prompt") && mcpConfig.Prompt != "" {
-		promptFlag = mcpConfig.Prompt
+// setScriptValuesInViper sets script configuration values in viper
+// This makes script settings have the same precedence as config file settings
+func setScriptValuesInViper(mcpConfig *config.Config) {
+	if mcpConfig.Prompt != "" {
+		viper.Set("prompt", mcpConfig.Prompt)
 	}
-	if !cmd.Flags().Changed("model") && mcpConfig.Model != "" {
-		modelFlag = mcpConfig.Model
+	if mcpConfig.Model != "" {
+		viper.Set("model", mcpConfig.Model)
 	}
-	if !cmd.Flags().Changed("max-steps") && mcpConfig.MaxSteps != 0 {
-		maxSteps = mcpConfig.MaxSteps
+	if mcpConfig.MaxSteps != 0 {
+		viper.Set("max-steps", mcpConfig.MaxSteps)
 	}
-	if !cmd.Flags().Changed("debug") && mcpConfig.Debug {
-		debugMode = mcpConfig.Debug
+	if mcpConfig.Debug {
+		viper.Set("debug", mcpConfig.Debug)
 	}
-	if !cmd.Flags().Changed("system-prompt") && mcpConfig.SystemPrompt != "" {
-		systemPromptFile = mcpConfig.SystemPrompt
+	if mcpConfig.SystemPrompt != "" {
+		viper.Set("system-prompt", mcpConfig.SystemPrompt)
 	}
-	if !cmd.Flags().Changed("provider-api-key") && mcpConfig.ProviderAPIKey != "" {
-		providerAPIKey = mcpConfig.ProviderAPIKey
+	if mcpConfig.ProviderAPIKey != "" {
+		viper.Set("provider-api-key", mcpConfig.ProviderAPIKey)
 	}
-	if !cmd.Flags().Changed("provider-url") && mcpConfig.ProviderURL != "" {
-		providerURL = mcpConfig.ProviderURL
+	if mcpConfig.ProviderURL != "" {
+		viper.Set("provider-url", mcpConfig.ProviderURL)
 	}
-	if !cmd.Flags().Changed("max-tokens") && mcpConfig.MaxTokens != 0 {
-		maxTokens = mcpConfig.MaxTokens
+	if mcpConfig.MaxTokens != 0 {
+		viper.Set("max-tokens", mcpConfig.MaxTokens)
 	}
-	if !cmd.Flags().Changed("temperature") && mcpConfig.Temperature != nil {
-		temperature = *mcpConfig.Temperature
+	if mcpConfig.Temperature != nil {
+		viper.Set("temperature", *mcpConfig.Temperature)
 	}
-	if !cmd.Flags().Changed("top-p") && mcpConfig.TopP != nil {
-		topP = *mcpConfig.TopP
+	if mcpConfig.TopP != nil {
+		viper.Set("top-p", *mcpConfig.TopP)
 	}
-	if !cmd.Flags().Changed("top-k") && mcpConfig.TopK != nil {
-		topK = *mcpConfig.TopK
+	if mcpConfig.TopK != nil {
+		viper.Set("top-k", *mcpConfig.TopK)
 	}
-	if !cmd.Flags().Changed("stop-sequences") && len(mcpConfig.StopSequences) > 0 {
-		stopSequences = mcpConfig.StopSequences
+	if len(mcpConfig.StopSequences) > 0 {
+		viper.Set("stop-sequences", mcpConfig.StopSequences)
 	}
 }
 
