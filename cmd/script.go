@@ -75,6 +75,19 @@ func init() {
 	scriptCmd.Flags().Float32Var(&topP, "top-p", 0.95, "controls diversity via nucleus sampling (0.0-1.0)")
 	scriptCmd.Flags().Int32Var(&topK, "top-k", 40, "controls diversity by limiting top K tokens to sample from")
 	scriptCmd.Flags().StringSliceVar(&stopSequences, "stop-sequences", nil, "custom stop sequences (comma-separated)")
+
+	// Bind script command flags to viper so they have proper precedence
+	viper.BindPFlag("system-prompt", scriptCmd.Flags().Lookup("system-prompt"))
+	viper.BindPFlag("model", scriptCmd.Flags().Lookup("model"))
+	viper.BindPFlag("debug", scriptCmd.Flags().Lookup("debug"))
+	viper.BindPFlag("max-steps", scriptCmd.Flags().Lookup("max-steps"))
+	viper.BindPFlag("provider-url", scriptCmd.Flags().Lookup("provider-url"))
+	viper.BindPFlag("provider-api-key", scriptCmd.Flags().Lookup("provider-api-key"))
+	viper.BindPFlag("max-tokens", scriptCmd.Flags().Lookup("max-tokens"))
+	viper.BindPFlag("temperature", scriptCmd.Flags().Lookup("temperature"))
+	viper.BindPFlag("top-p", scriptCmd.Flags().Lookup("top-p"))
+	viper.BindPFlag("top-k", scriptCmd.Flags().Lookup("top-k"))
+	viper.BindPFlag("stop-sequences", scriptCmd.Flags().Lookup("stop-sequences"))
 }
 
 // parseCustomVariables extracts custom variables from command line arguments
@@ -165,8 +178,8 @@ func runScriptCommand(ctx context.Context, scriptFile string, variables map[stri
 	// Override the global config for normal mode
 	scriptMCPConfig = mcpConfig
 
-	// Set script values in viper (they will have same precedence as config file)
-	setScriptValuesInViper(mcpConfig)
+	// Set script values in viper (only if flags weren't explicitly set)
+	setScriptValuesInViper(mcpConfig, cmd)
 
 	// Set the prompt flag if it was specified in the script and not overridden by command line
 	if mcpConfig.Prompt != "" && promptFlag == "" {
@@ -222,42 +235,40 @@ func mergeScriptConfig(mcpConfig *config.Config, scriptConfig *config.Config) {
 }
 
 // setScriptValuesInViper sets script configuration values in viper
-// This makes script settings have the same precedence as config file settings
-func setScriptValuesInViper(mcpConfig *config.Config) {
-	if mcpConfig.Prompt != "" {
-		viper.Set("prompt", mcpConfig.Prompt)
-	}
-	if mcpConfig.Model != "" {
+// Only sets values if the corresponding flag wasn't explicitly provided
+func setScriptValuesInViper(mcpConfig *config.Config, cmd *cobra.Command) {
+	// Only set script values if the corresponding flag wasn't explicitly set
+	if mcpConfig.Model != "" && !cmd.Flags().Changed("model") {
 		viper.Set("model", mcpConfig.Model)
 	}
-	if mcpConfig.MaxSteps != 0 {
+	if mcpConfig.MaxSteps != 0 && !cmd.Flags().Changed("max-steps") {
 		viper.Set("max-steps", mcpConfig.MaxSteps)
 	}
-	if mcpConfig.Debug {
+	if mcpConfig.Debug && !cmd.Flags().Changed("debug") {
 		viper.Set("debug", mcpConfig.Debug)
 	}
-	if mcpConfig.SystemPrompt != "" {
+	if mcpConfig.SystemPrompt != "" && !cmd.Flags().Changed("system-prompt") {
 		viper.Set("system-prompt", mcpConfig.SystemPrompt)
 	}
-	if mcpConfig.ProviderAPIKey != "" {
+	if mcpConfig.ProviderAPIKey != "" && !cmd.Flags().Changed("provider-api-key") {
 		viper.Set("provider-api-key", mcpConfig.ProviderAPIKey)
 	}
-	if mcpConfig.ProviderURL != "" {
+	if mcpConfig.ProviderURL != "" && !cmd.Flags().Changed("provider-url") {
 		viper.Set("provider-url", mcpConfig.ProviderURL)
 	}
-	if mcpConfig.MaxTokens != 0 {
+	if mcpConfig.MaxTokens != 0 && !cmd.Flags().Changed("max-tokens") {
 		viper.Set("max-tokens", mcpConfig.MaxTokens)
 	}
-	if mcpConfig.Temperature != nil {
+	if mcpConfig.Temperature != nil && !cmd.Flags().Changed("temperature") {
 		viper.Set("temperature", *mcpConfig.Temperature)
 	}
-	if mcpConfig.TopP != nil {
+	if mcpConfig.TopP != nil && !cmd.Flags().Changed("top-p") {
 		viper.Set("top-p", *mcpConfig.TopP)
 	}
-	if mcpConfig.TopK != nil {
+	if mcpConfig.TopK != nil && !cmd.Flags().Changed("top-k") {
 		viper.Set("top-k", *mcpConfig.TopK)
 	}
-	if len(mcpConfig.StopSequences) > 0 {
+	if len(mcpConfig.StopSequences) > 0 && !cmd.Flags().Changed("stop-sequences") {
 		viper.Set("stop-sequences", mcpConfig.StopSequences)
 	}
 }
