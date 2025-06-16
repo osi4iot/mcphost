@@ -26,6 +26,7 @@ var (
 	debugMode        bool
 	promptFlag       string
 	quietFlag        bool
+	noExitFlag       bool
 	maxSteps         int
 	scriptMCPConfig  *config.Config // Used to override config in script mode
 
@@ -94,6 +95,8 @@ func init() {
 	rootCmd.PersistentFlags().
 		BoolVar(&quietFlag, "quiet", false, "suppress all output (only works with --prompt)")
 	rootCmd.PersistentFlags().
+		BoolVar(&noExitFlag, "no-exit", false, "prevent non-interactive mode from exiting, show input prompt instead")
+	rootCmd.PersistentFlags().
 		IntVar(&maxSteps, "max-steps", 0, "maximum number of agent steps (0 for unlimited)")
 
 	flags := rootCmd.PersistentFlags()
@@ -146,6 +149,9 @@ func runNormalMode(ctx context.Context) error {
 	// Validate flag combinations
 	if quietFlag && promptFlag == "" {
 		return fmt.Errorf("--quiet flag can only be used with --prompt/-p")
+	}
+	if noExitFlag && promptFlag == "" {
+		return fmt.Errorf("--no-exit flag can only be used with --prompt/-p")
 	}
 
 	// Set up logging
@@ -327,7 +333,7 @@ func runNormalMode(ctx context.Context) error {
 
 	// Check if running in non-interactive mode
 	if promptFlag != "" {
-		return runNonInteractiveMode(ctx, mcpAgent, cli, promptFlag, modelName, messages, quietFlag)
+		return runNonInteractiveMode(ctx, mcpAgent, cli, promptFlag, modelName, messages, quietFlag, noExitFlag, mcpConfig)
 	}
 
 	// Quiet mode is not allowed in interactive mode
@@ -339,7 +345,7 @@ func runNormalMode(ctx context.Context) error {
 }
 
 // runNonInteractiveMode handles the non-interactive mode execution
-func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, prompt, modelName string, messages []*schema.Message, quiet bool) error {
+func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, prompt, modelName string, messages []*schema.Message, quiet, noExit bool, mcpConfig *config.Config) error {
 	// Display user message (skip if quiet)
 	if !quiet && cli != nil {
 		cli.DisplayUserMessage(prompt)
@@ -444,7 +450,33 @@ func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.C
 		fmt.Print(response.Content)
 	}
 
-	// Exit after displaying the final response
+	// Add assistant response to history
+	messages = append(messages, response)
+
+	// If --no-exit flag is set, show the input and continue to interactive mode
+	if noExit && !quiet && cli != nil {
+		// Display the original prompt that was processed
+		cli.DisplayInfo(fmt.Sprintf("Original prompt: %s", prompt))
+
+		// Prepare data for slash commands in interactive mode
+		var serverNames []string
+		for name := range mcpConfig.MCPServers {
+			serverNames = append(serverNames, name)
+		}
+
+		tools := mcpAgent.GetTools()
+		var toolNames []string
+		for _, tool := range tools {
+			if info, err := tool.Info(ctx); err == nil {
+				toolNames = append(toolNames, info.Name)
+			}
+		}
+
+		// Continue to interactive mode
+		return runInteractiveMode(ctx, mcpAgent, cli, serverNames, toolNames, modelName, messages)
+	}
+
+	// Exit after displaying the final response (normal behavior)
 	return nil
 }
 

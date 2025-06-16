@@ -158,8 +158,6 @@ func runScriptCommand(ctx context.Context, scriptFile string, variables map[stri
 		return fmt.Errorf("failed to parse script file: %v", err)
 	}
 
-
-
 	// Create config from script or load normal config
 	var mcpConfig *config.Config
 	if len(scriptConfig.MCPServers) > 0 {
