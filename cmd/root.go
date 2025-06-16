@@ -453,11 +453,8 @@ func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.C
 	// Add assistant response to history
 	messages = append(messages, response)
 
-	// If --no-exit flag is set, show the input and continue to interactive mode
+	// If --no-exit flag is set, continue to interactive mode
 	if noExit && !quiet && cli != nil {
-		// Display the original prompt that was processed
-		cli.DisplayInfo(fmt.Sprintf("Original prompt: %s", prompt))
-
 		// Prepare data for slash commands in interactive mode
 		var serverNames []string
 		for name := range mcpConfig.MCPServers {

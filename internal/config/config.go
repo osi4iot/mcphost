@@ -30,6 +30,7 @@ type Config struct {
 	ProviderAPIKey string                     `json:"provider-api-key,omitempty" yaml:"provider-api-key,omitempty"`
 	ProviderURL    string                     `json:"provider-url,omitempty" yaml:"provider-url,omitempty"`
 	Prompt         string                     `json:"prompt,omitempty" yaml:"prompt,omitempty"`
+	NoExit         bool                       `json:"no-exit,omitempty" yaml:"no-exit,omitempty"`
 
 	// Model generation parameters
 	MaxTokens     int      `json:"max-tokens,omitempty" yaml:"max-tokens,omitempty"`

@@ -65,6 +65,7 @@ func init() {
 	scriptCmd.Flags().BoolVar(&debugMode, "debug", false, "enable debug logging")
 	scriptCmd.Flags().StringVarP(&promptFlag, "prompt", "p", "", "override the prompt from the script file")
 	scriptCmd.Flags().BoolVar(&quietFlag, "quiet", false, "suppress all output")
+	scriptCmd.Flags().BoolVar(&noExitFlag, "no-exit", false, "prevent script from exiting, show input prompt instead")
 	scriptCmd.Flags().IntVar(&maxSteps, "max-steps", 0, "maximum number of agent steps (0 for unlimited)")
 	scriptCmd.Flags().StringVar(&providerURL, "provider-url", "", "base URL for the provider API (applies to OpenAI, Anthropic, Ollama, and Google)")
 	scriptCmd.Flags().StringVar(&providerAPIKey, "provider-api-key", "", "API key for the provider (applies to OpenAI, Anthropic, and Google)")
@@ -184,6 +185,11 @@ func runScriptCommand(ctx context.Context, scriptFile string, variables map[stri
 		promptFlag = mcpConfig.Prompt
 	}
 
+	// Validate that --no-exit is only used when there's a prompt
+	if noExitFlag && promptFlag == "" {
+		return fmt.Errorf("--no-exit flag can only be used when there's a prompt (either from script content or --prompt flag)")
+	}
+
 	// Clean up script config after execution
 	defer func() {
 		scriptMCPConfig = nil
@@ -214,6 +220,9 @@ func mergeScriptConfig(mcpConfig *config.Config, scriptConfig *config.Config) {
 	}
 	if scriptConfig.Prompt != "" {
 		mcpConfig.Prompt = scriptConfig.Prompt
+	}
+	if scriptConfig.NoExit {
+		mcpConfig.NoExit = scriptConfig.NoExit
 	}
 	if scriptConfig.MaxTokens != 0 {
 		mcpConfig.MaxTokens = scriptConfig.MaxTokens
@@ -253,6 +262,10 @@ func setScriptValuesInViper(mcpConfig *config.Config, cmd *cobra.Command) {
 	}
 	if mcpConfig.ProviderURL != "" && !cmd.Flags().Changed("provider-url") {
 		viper.Set("provider-url", mcpConfig.ProviderURL)
+	}
+	if mcpConfig.NoExit && !cmd.Flags().Changed("no-exit") {
+		// Set the global noExitFlag variable if it wasn't explicitly set via command line
+		noExitFlag = mcpConfig.NoExit
 	}
 	if mcpConfig.MaxTokens != 0 && !cmd.Flags().Changed("max-tokens") {
 		viper.Set("max-tokens", mcpConfig.MaxTokens)
