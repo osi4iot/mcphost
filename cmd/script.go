@@ -51,6 +51,12 @@ This will replace ${directory} with "/tmp" and ${name} with "John" in the script
 	FParseErrWhitelist: cobra.FParseErrWhitelist{
 		UnknownFlags: true, // Allow unknown flags for variable substitution
 	},
+	PreRun: func(cmd *cobra.Command, args []string) {
+		// Override config with frontmatter values from the script file
+		scriptFile := args[0]
+		variables := parseCustomVariables(cmd)
+		overrideConfigWithFrontmatter(scriptFile, variables, cmd)
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		scriptFile := args[0]
 
@@ -62,6 +68,7 @@ This will replace ${directory} with "/tmp" and ${name} with "John" in the script
 }
 
 func init() {
+	cobra.OnInitialize(initConfig)
 	rootCmd.AddCommand(scriptCmd)
 
 	// Add the same flags as the root command, but they will override script settings
@@ -94,6 +101,57 @@ func init() {
 	viper.BindPFlag("top-p", scriptCmd.Flags().Lookup("top-p"))
 	viper.BindPFlag("top-k", scriptCmd.Flags().Lookup("top-k"))
 	viper.BindPFlag("stop-sequences", scriptCmd.Flags().Lookup("stop-sequences"))
+}
+
+// overrideConfigWithFrontmatter parses the script file and overrides viper config with frontmatter values
+// This is the only purpose of this function - to apply frontmatter configuration to viper
+func overrideConfigWithFrontmatter(scriptFile string, variables map[string]string, cmd *cobra.Command) {
+	// Parse the script file to get frontmatter configuration
+	scriptConfig, err := parseScriptFile(scriptFile, variables)
+	if err != nil {
+		// If we can't parse the script file, just continue with existing config
+		// The error will be handled again in runScriptCommand
+		return
+	}
+
+	// Override viper values with frontmatter values (only if flags weren't explicitly set)
+	if scriptConfig.Model != "" && !cmd.Flags().Changed("model") {
+		viper.Set("model", scriptConfig.Model)
+	}
+	if scriptConfig.MaxSteps != 0 && !cmd.Flags().Changed("max-steps") {
+		viper.Set("max-steps", scriptConfig.MaxSteps)
+	}
+	if scriptConfig.Debug && !cmd.Flags().Changed("debug") {
+		viper.Set("debug", scriptConfig.Debug)
+	}
+	if scriptConfig.SystemPrompt != "" && !cmd.Flags().Changed("system-prompt") {
+		viper.Set("system-prompt", scriptConfig.SystemPrompt)
+	}
+	if scriptConfig.ProviderAPIKey != "" && !cmd.Flags().Changed("provider-api-key") {
+		viper.Set("provider-api-key", scriptConfig.ProviderAPIKey)
+	}
+	if scriptConfig.ProviderURL != "" && !cmd.Flags().Changed("provider-url") {
+		viper.Set("provider-url", scriptConfig.ProviderURL)
+	}
+	if scriptConfig.MaxTokens != 0 && !cmd.Flags().Changed("max-tokens") {
+		viper.Set("max-tokens", scriptConfig.MaxTokens)
+	}
+	if scriptConfig.Temperature != nil && !cmd.Flags().Changed("temperature") {
+		viper.Set("temperature", *scriptConfig.Temperature)
+	}
+	if scriptConfig.TopP != nil && !cmd.Flags().Changed("top-p") {
+		viper.Set("top-p", *scriptConfig.TopP)
+	}
+	if scriptConfig.TopK != nil && !cmd.Flags().Changed("top-k") {
+		viper.Set("top-k", *scriptConfig.TopK)
+	}
+	if len(scriptConfig.StopSequences) > 0 && !cmd.Flags().Changed("stop-sequences") {
+		viper.Set("stop-sequences", scriptConfig.StopSequences)
+	}
+	if scriptConfig.NoExit && !cmd.Flags().Changed("no-exit") {
+		// Set the global noExitFlag variable if it wasn't explicitly set via command line
+		noExitFlag = scriptConfig.NoExit
+	}
 }
 
 // parseCustomVariables extracts custom variables from command line arguments
@@ -157,39 +215,48 @@ func parseCustomVariables(_ *cobra.Command) map[string]string {
 	return variables
 }
 
-func runScriptCommand(ctx context.Context, scriptFile string, variables map[string]string, cmd *cobra.Command) error {
-	// Parse the script file
+func runScriptCommand(ctx context.Context, scriptFile string, variables map[string]string, _ *cobra.Command) error {
+	// Parse the script file to get MCP servers and prompt
 	scriptConfig, err := parseScriptFile(scriptFile, variables)
 	if err != nil {
 		return fmt.Errorf("failed to parse script file: %v", err)
 	}
 
-	// Create config from script or load normal config
+	// Get MCP config - use script servers if available, otherwise use global viper config
 	var mcpConfig *config.Config
 	if len(scriptConfig.MCPServers) > 0 {
-		// Use servers from script
-		mcpConfig = scriptConfig
-	} else {
-		// Fall back to normal config loading
-		mcpConfig, err = config.LoadMCPConfig(configFile)
-		if err != nil {
-			return fmt.Errorf("failed to load MCP config: %v", err)
+		// Use MCP servers from script, but get other config values from viper
+		mcpConfig = &config.Config{
+			MCPServers: scriptConfig.MCPServers,
 		}
-		// Merge script config values into loaded config
-		mergeScriptConfig(mcpConfig, scriptConfig)
+		if err := viper.Unmarshal(mcpConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal config: %v", err)
+		}
+		// Restore the MCP servers from script (viper.Unmarshal might have overwritten them)
+		mcpConfig.MCPServers = scriptConfig.MCPServers
+	} else {
+		// Get MCP config from the global viper instance (already loaded by initConfig)
+		mcpConfig = &config.Config{
+			MCPServers: make(map[string]config.MCPServerConfig),
+		}
+		if err := viper.Unmarshal(mcpConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal MCP config: %v", err)
+		}
 	}
 
-	// Set script values in viper (only if flags weren't explicitly set)
-	setScriptValuesInViper(mcpConfig, cmd)
+	// Validate the config
+	if err := mcpConfig.Validate(); err != nil {
+		return fmt.Errorf("invalid MCP config: %v", err)
+	}
 
 	// Get final prompt - prioritize command line flag, then script content
-	finalPrompt := promptFlag
-	if finalPrompt == "" && mcpConfig.Prompt != "" {
-		finalPrompt = mcpConfig.Prompt
+	finalPrompt := viper.GetString("prompt")
+	if finalPrompt == "" && scriptConfig.Prompt != "" {
+		finalPrompt = scriptConfig.Prompt
 	}
 
 	// Get final no-exit setting - prioritize command line flag, then script config
-	finalNoExit := noExitFlag || mcpConfig.NoExit
+	finalNoExit := noExitFlag || scriptConfig.NoExit
 
 	// Validate that --no-exit is only used when there's a prompt
 	if finalNoExit && finalPrompt == "" {
@@ -200,90 +267,8 @@ func runScriptCommand(ctx context.Context, scriptFile string, variables map[stri
 	return runScriptMode(ctx, mcpConfig, finalPrompt, finalNoExit)
 }
 
-func mergeScriptConfig(mcpConfig *config.Config, scriptConfig *config.Config) {
-	if scriptConfig.Model != "" {
-		mcpConfig.Model = scriptConfig.Model
-	}
-	if scriptConfig.MaxSteps != 0 {
-		mcpConfig.MaxSteps = scriptConfig.MaxSteps
-	}
-	if scriptConfig.Debug {
-		mcpConfig.Debug = scriptConfig.Debug
-	}
-	if scriptConfig.SystemPrompt != "" {
-		mcpConfig.SystemPrompt = scriptConfig.SystemPrompt
-	}
-	if scriptConfig.ProviderAPIKey != "" {
-		mcpConfig.ProviderAPIKey = scriptConfig.ProviderAPIKey
-	}
-	if scriptConfig.ProviderURL != "" {
-		mcpConfig.ProviderURL = scriptConfig.ProviderURL
-	}
-	if scriptConfig.Prompt != "" {
-		mcpConfig.Prompt = scriptConfig.Prompt
-	}
-	if scriptConfig.NoExit {
-		mcpConfig.NoExit = scriptConfig.NoExit
-	}
-	if scriptConfig.MaxTokens != 0 {
-		mcpConfig.MaxTokens = scriptConfig.MaxTokens
-	}
-	if scriptConfig.Temperature != nil {
-		mcpConfig.Temperature = scriptConfig.Temperature
-	}
-	if scriptConfig.TopP != nil {
-		mcpConfig.TopP = scriptConfig.TopP
-	}
-	if scriptConfig.TopK != nil {
-		mcpConfig.TopK = scriptConfig.TopK
-	}
-	if len(scriptConfig.StopSequences) > 0 {
-		mcpConfig.StopSequences = scriptConfig.StopSequences
-	}
-}
-
-// setScriptValuesInViper sets script configuration values in viper
-// Only sets values if the corresponding flag wasn't explicitly provided
-func setScriptValuesInViper(mcpConfig *config.Config, cmd *cobra.Command) {
-	// Only set script values if the corresponding flag wasn't explicitly set
-	if mcpConfig.Model != "" && !cmd.Flags().Changed("model") {
-		viper.Set("model", mcpConfig.Model)
-	}
-	if mcpConfig.MaxSteps != 0 && !cmd.Flags().Changed("max-steps") {
-		viper.Set("max-steps", mcpConfig.MaxSteps)
-	}
-	if mcpConfig.Debug && !cmd.Flags().Changed("debug") {
-		viper.Set("debug", mcpConfig.Debug)
-	}
-	if mcpConfig.SystemPrompt != "" && !cmd.Flags().Changed("system-prompt") {
-		viper.Set("system-prompt", mcpConfig.SystemPrompt)
-	}
-	if mcpConfig.ProviderAPIKey != "" && !cmd.Flags().Changed("provider-api-key") {
-		viper.Set("provider-api-key", mcpConfig.ProviderAPIKey)
-	}
-	if mcpConfig.ProviderURL != "" && !cmd.Flags().Changed("provider-url") {
-		viper.Set("provider-url", mcpConfig.ProviderURL)
-	}
-	if mcpConfig.NoExit && !cmd.Flags().Changed("no-exit") {
-		// Set the global noExitFlag variable if it wasn't explicitly set via command line
-		noExitFlag = mcpConfig.NoExit
-	}
-	if mcpConfig.MaxTokens != 0 && !cmd.Flags().Changed("max-tokens") {
-		viper.Set("max-tokens", mcpConfig.MaxTokens)
-	}
-	if mcpConfig.Temperature != nil && !cmd.Flags().Changed("temperature") {
-		viper.Set("temperature", *mcpConfig.Temperature)
-	}
-	if mcpConfig.TopP != nil && !cmd.Flags().Changed("top-p") {
-		viper.Set("top-p", *mcpConfig.TopP)
-	}
-	if mcpConfig.TopK != nil && !cmd.Flags().Changed("top-k") {
-		viper.Set("top-k", *mcpConfig.TopK)
-	}
-	if len(mcpConfig.StopSequences) > 0 && !cmd.Flags().Changed("stop-sequences") {
-		viper.Set("stop-sequences", mcpConfig.StopSequences)
-	}
-}
+// mergeScriptConfig and setScriptValuesInViper functions removed
+// Configuration override is now handled in overrideConfigWithFrontmatter in the PreRun hook
 
 // parseScriptFile parses a script file with YAML frontmatter and returns config
 func parseScriptFile(filename string, variables map[string]string) (*config.Config, error) {
