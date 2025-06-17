@@ -57,7 +57,14 @@ type SystemPromptConfig struct {
 
 // LoadMCPConfig loads MCP configuration from file
 func LoadMCPConfig(configFile string) (*Config, error) {
-	v := viper.New()
+	return LoadMCPConfigWithViper(configFile, nil)
+}
+
+// LoadMCPConfigWithViper loads MCP configuration from file using the provided viper instance
+func LoadMCPConfigWithViper(configFile string, v *viper.Viper) (*Config, error) {
+	if v == nil {
+		v = viper.New()
+	}
 
 	if configFile == "" {
 		homeDir, err := os.UserHomeDir()

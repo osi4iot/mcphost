@@ -79,7 +79,46 @@ func Execute() {
 	}
 }
 
+func initConfig() {
+	if configFile != "" {
+		// Use config file from the flag
+		viper.SetConfigFile(configFile)
+	} else {
+		// Find home directory
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error finding home directory: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Search config in home directory with name ".mcphost" (without extension)
+		viper.AddConfigPath(home)
+		viper.SetConfigName(".mcphost")
+		viper.SetConfigType("yaml")
+
+		// Also try JSON format
+		if err := viper.ReadInConfig(); err != nil {
+			viper.SetConfigType("json")
+			if err := viper.ReadInConfig(); err != nil {
+				// Try legacy .mcp files
+				viper.SetConfigName(".mcp")
+				viper.SetConfigType("yaml")
+				if err := viper.ReadInConfig(); err != nil {
+					viper.SetConfigType("json")
+					viper.ReadInConfig() // Ignore error if no config found
+				}
+			}
+		}
+	}
+
+	// Set environment variable prefix
+	viper.SetEnvPrefix("MCPHOST")
+	viper.AutomaticEnv()
+}
+
 func init() {
+	cobra.OnInitialize(initConfig)
+
 	rootCmd.PersistentFlags().
 		StringVar(&configFile, "config", "", "config file (default is $HOME/.mcp.json)")
 	rootCmd.PersistentFlags().
@@ -129,16 +168,7 @@ func init() {
 	viper.BindPFlag("num-gpu", rootCmd.PersistentFlags().Lookup("num-gpu"))
 	viper.BindPFlag("main-gpu", rootCmd.PersistentFlags().Lookup("main-gpu"))
 
-	// Set defaults in viper (lowest precedence)
-	viper.SetDefault("model", "anthropic:claude-sonnet-4-20250514")
-	viper.SetDefault("max-steps", 0)
-	viper.SetDefault("debug", false)
-	viper.SetDefault("max-tokens", 4096)
-	viper.SetDefault("temperature", 0.7)
-	viper.SetDefault("top-p", 0.95)
-	viper.SetDefault("top-k", 40)
-	viper.SetDefault("num-gpu", 1)
-	viper.SetDefault("main-gpu", 0)
+	// Defaults are already set in flag definitions, no need to duplicate in viper
 }
 
 func runMCPHost(ctx context.Context) error {
@@ -159,7 +189,7 @@ func runNormalMode(ctx context.Context) error {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	}
 
-	// Load configuration
+	// Load MCP configuration
 	var mcpConfig *config.Config
 	var err error
 
@@ -167,80 +197,50 @@ func runNormalMode(ctx context.Context) error {
 		// Use script-provided config
 		mcpConfig = scriptMCPConfig
 	} else {
-		// Load normal config
-		mcpConfig, err = config.LoadMCPConfig(configFile)
-		if err != nil {
-			return fmt.Errorf("failed to load MCP config: %v", err)
+		// Get MCP config from the global viper instance (already loaded by initConfig)
+		mcpConfig = &config.Config{
+			MCPServers: make(map[string]config.MCPServerConfig),
+		}
+		if err := viper.Unmarshal(mcpConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal MCP config: %v", err)
+		}
+
+		// Validate the config
+		if err := mcpConfig.Validate(); err != nil {
+			return fmt.Errorf("invalid MCP config: %v", err)
 		}
 	}
 
-	// Set up viper to read from the same config file for flag values
-	if configFile == "" {
-		// Use default config file locations
-		homeDir, err := os.UserHomeDir()
-		if err == nil {
-			viper.SetConfigName(".mcphost")
-			viper.AddConfigPath(homeDir)
-			viper.SetConfigType("yaml")
-			if err := viper.ReadInConfig(); err != nil {
-				// Try .mcphost.json
-				viper.SetConfigType("json")
-				if err := viper.ReadInConfig(); err != nil {
-					// Try legacy .mcp files
-					viper.SetConfigName(".mcp")
-					viper.SetConfigType("yaml")
-					if err := viper.ReadInConfig(); err != nil {
-						viper.SetConfigType("json")
-						viper.ReadInConfig() // Ignore error if no config found
-					}
-				}
-			}
-		}
-	} else {
-		// Use specified config file
-		viper.SetConfigFile(configFile)
-		viper.ReadInConfig() // Ignore error if file doesn't exist
-	}
-
-	// Get final values from viper (respects precedence: flag > config > default)
-	finalModel := viper.GetString("model")
-	finalSystemPrompt := viper.GetString("system-prompt")
-	finalDebug := viper.GetBool("debug")
-	finalMaxSteps := viper.GetInt("max-steps")
-	finalProviderURL := viper.GetString("provider-url")
-	finalProviderAPIKey := viper.GetString("provider-api-key")
-	finalMaxTokens := viper.GetInt("max-tokens")
-	finalTemperature := float32(viper.GetFloat64("temperature"))
-	finalTopP := float32(viper.GetFloat64("top-p"))
-	finalTopK := int32(viper.GetInt("top-k"))
-	finalStopSequences := viper.GetStringSlice("stop-sequences")
-	finalNumGPU := int32(viper.GetInt("num-gpu"))
-	finalMainGPU := int32(viper.GetInt("main-gpu"))
-
-	// Update debug mode if it was set in config
-	if finalDebug && !debugMode {
-		debugMode = finalDebug
+	// Update debug mode from viper
+	if viper.GetBool("debug") && !debugMode {
+		debugMode = viper.GetBool("debug")
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	}
 
-	systemPrompt, err := config.LoadSystemPrompt(finalSystemPrompt)
+	systemPrompt, err := config.LoadSystemPrompt(viper.GetString("system-prompt"))
 	if err != nil {
 		return fmt.Errorf("failed to load system prompt: %v", err)
 	}
 
 	// Create model configuration
+	temperature := float32(viper.GetFloat64("temperature"))
+	topP := float32(viper.GetFloat64("top-p"))
+	topK := int32(viper.GetInt("top-k"))
+	numGPU := int32(viper.GetInt("num-gpu"))
+	mainGPU := int32(viper.GetInt("main-gpu"))
+
 	modelConfig := &models.ProviderConfig{
-		ModelString:    finalModel,
+		ModelString:    viper.GetString("model"),
 		SystemPrompt:   systemPrompt,
-		ProviderAPIKey: finalProviderAPIKey,
-		ProviderURL:    finalProviderURL,
-		MaxTokens:      finalMaxTokens,
-		Temperature:    &finalTemperature,
-		TopP:           &finalTopP,
-		TopK:           &finalTopK,
-		StopSequences:  finalStopSequences,
-		NumGPU:         &finalNumGPU,
-		MainGPU:        &finalMainGPU,
+		ProviderAPIKey: viper.GetString("provider-api-key"),
+		ProviderURL:    viper.GetString("provider-url"),
+		MaxTokens:      viper.GetInt("max-tokens"),
+		Temperature:    &temperature,
+		TopP:           &topP,
+		TopK:           &topK,
+		StopSequences:  viper.GetStringSlice("stop-sequences"),
+		NumGPU:         &numGPU,
+		MainGPU:        &mainGPU,
 	}
 
 	// Create agent configuration
@@ -248,7 +248,7 @@ func runNormalMode(ctx context.Context) error {
 		ModelConfig:  modelConfig,
 		MCPConfig:    mcpConfig,
 		SystemPrompt: systemPrompt,
-		MaxSteps:     finalMaxSteps, // Pass 0 for infinite, agent will handle it
+		MaxSteps:     viper.GetInt("max-steps"), // Pass 0 for infinite, agent will handle it
 	}
 
 	// Create the agent
@@ -259,7 +259,8 @@ func runNormalMode(ctx context.Context) error {
 	defer mcpAgent.Close()
 
 	// Get model name for display
-	parts := strings.SplitN(finalModel, ":", 2)
+	modelString := viper.GetString("model")
+	parts := strings.SplitN(modelString, ":", 2)
 	modelName := "Unknown"
 	if len(parts) == 2 {
 		modelName = parts[1]
@@ -271,7 +272,7 @@ func runNormalMode(ctx context.Context) error {
 	// Create CLI interface (skip if quiet mode)
 	var cli *ui.CLI
 	if !quietFlag {
-		cli, err = ui.NewCLI(finalDebug)
+		cli, err = ui.NewCLI(viper.GetBool("debug"))
 		if err != nil {
 			return fmt.Errorf("failed to create CLI: %v", err)
 		}
@@ -283,31 +284,32 @@ func runNormalMode(ctx context.Context) error {
 		cli.DisplayInfo(fmt.Sprintf("Loaded %d tools from MCP servers", len(tools)))
 
 		// Display debug configuration if debug mode is enabled
-		if finalDebug {
+		if viper.GetBool("debug") {
 			debugConfig := map[string]any{
-				"model":         finalModel,
-				"max-steps":     finalMaxSteps,
-				"max-tokens":    finalMaxTokens,
-				"temperature":   finalTemperature,
-				"top-p":         finalTopP,
-				"top-k":         finalTopK,
-				"provider-url":  finalProviderURL,
-				"system-prompt": finalSystemPrompt,
+				"model":         viper.GetString("model"),
+				"max-steps":     viper.GetInt("max-steps"),
+				"max-tokens":    viper.GetInt("max-tokens"),
+				"temperature":   viper.GetFloat64("temperature"),
+				"top-p":         viper.GetFloat64("top-p"),
+				"top-k":         viper.GetInt("top-k"),
+				"provider-url":  viper.GetString("provider-url"),
+				"system-prompt": viper.GetString("system-prompt"),
 			}
 
 			// Add Ollama-specific parameters if using Ollama
-			if strings.HasPrefix(finalModel, "ollama:") {
-				debugConfig["num-gpu"] = finalNumGPU
-				debugConfig["main-gpu"] = finalMainGPU
+			if strings.HasPrefix(viper.GetString("model"), "ollama:") {
+				debugConfig["num-gpu"] = viper.GetInt("num-gpu")
+				debugConfig["main-gpu"] = viper.GetInt("main-gpu")
 			}
 
 			// Only include non-empty stop sequences
-			if len(finalStopSequences) > 0 {
-				debugConfig["stop-sequences"] = finalStopSequences
+			stopSequences := viper.GetStringSlice("stop-sequences")
+			if len(stopSequences) > 0 {
+				debugConfig["stop-sequences"] = stopSequences
 			}
 
 			// Only include API keys if they're set (but don't show the actual values for security)
-			if finalProviderAPIKey != "" {
+			if viper.GetString("provider-api-key") != "" {
 				debugConfig["provider-api-key"] = "[SET]"
 			}
 
