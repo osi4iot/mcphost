@@ -344,22 +344,68 @@ func runNormalMode(ctx context.Context) error {
 	return runInteractiveMode(ctx, mcpAgent, cli, serverNames, toolNames, modelName, messages)
 }
 
-// runNonInteractiveMode handles the non-interactive mode execution
-func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, prompt, modelName string, messages []*schema.Message, quiet, noExit bool, mcpConfig *config.Config) error {
-	// Display user message (skip if quiet)
-	if !quiet && cli != nil {
-		cli.DisplayUserMessage(prompt)
+// AgenticLoopConfig configures the behavior of the unified agentic loop
+type AgenticLoopConfig struct {
+	// Mode configuration
+	IsInteractive    bool   // true for interactive mode, false for non-interactive
+	InitialPrompt    string // initial prompt for non-interactive mode
+	ContinueAfterRun bool   // true to continue to interactive mode after initial run (--no-exit)
+
+	// UI configuration
+	Quiet bool // suppress all output except final response
+
+	// Context data
+	ServerNames []string       // for slash commands
+	ToolNames   []string       // for slash commands
+	ModelName   string         // for display
+	MCPConfig   *config.Config // for continuing to interactive mode
+}
+
+// runAgenticLoop handles all execution modes with a single unified loop
+func runAgenticLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, messages []*schema.Message, config AgenticLoopConfig) error {
+	// Handle initial prompt for non-interactive modes
+	if !config.IsInteractive && config.InitialPrompt != "" {
+		// Display user message (skip if quiet)
+		if !config.Quiet && cli != nil {
+			cli.DisplayUserMessage(config.InitialPrompt)
+		}
+
+		// Add user message to history
+		messages = append(messages, schema.UserMessage(config.InitialPrompt))
+
+		// Process the initial prompt with tool calls
+		response, err := runAgenticStep(ctx, mcpAgent, cli, messages, config)
+		if err != nil {
+			return err
+		}
+
+		// Add assistant response to history
+		messages = append(messages, response)
+
+		// If not continuing to interactive mode, exit here
+		if !config.ContinueAfterRun {
+			return nil
+		}
+
+		// Update config for interactive mode continuation
+		config.IsInteractive = true
+		config.Quiet = false // Can't be quiet in interactive mode
 	}
 
-	// Add user message to history
-	messages = append(messages, schema.UserMessage(prompt))
+	// Interactive loop (or continuation after non-interactive)
+	if config.IsInteractive {
+		return runInteractiveLoop(ctx, mcpAgent, cli, messages, config)
+	}
 
-	// Get agent response with controlled spinner that stops for tool call display
-	var response *schema.Message
+	return nil
+}
+
+// runAgenticStep processes a single step of the agentic loop (handles tool calls)
+func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, messages []*schema.Message, config AgenticLoopConfig) (*schema.Message, error) {
 	var currentSpinner *ui.Spinner
 
 	// Start initial spinner (skip if quiet)
-	if !quiet && cli != nil {
+	if !config.Quiet && cli != nil {
 		currentSpinner = ui.NewSpinner("Thinking...")
 		currentSpinner.Start()
 	}
@@ -367,7 +413,7 @@ func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.C
 	response, err := mcpAgent.GenerateWithLoop(ctx, messages,
 		// Tool call handler - called when a tool is about to be executed
 		func(toolName, toolArgs string) {
-			if !quiet && cli != nil {
+			if !config.Quiet && cli != nil {
 				// Stop spinner before displaying tool call
 				if currentSpinner != nil {
 					currentSpinner.Stop()
@@ -378,7 +424,7 @@ func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.C
 		},
 		// Tool execution handler - called when tool execution starts/ends
 		func(toolName string, isStarting bool) {
-			if !quiet && cli != nil {
+			if !config.Quiet && cli != nil {
 				if isStarting {
 					// Start spinner for tool execution
 					currentSpinner = ui.NewSpinner(fmt.Sprintf("Executing %s...", toolName))
@@ -394,7 +440,7 @@ func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.C
 		},
 		// Tool result handler - called when a tool execution completes
 		func(toolName, toolArgs, result string, isError bool) {
-			if !quiet && cli != nil {
+			if !config.Quiet && cli != nil {
 				cli.DisplayToolMessage(toolName, toolArgs, result, isError)
 				// Start spinner again for next LLM call
 				currentSpinner = ui.NewSpinner("Thinking...")
@@ -403,7 +449,7 @@ func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.C
 		},
 		// Response handler - called when the LLM generates a response
 		func(content string) {
-			if !quiet && cli != nil {
+			if !config.Quiet && cli != nil {
 				// Stop spinner when we get the final response
 				if currentSpinner != nil {
 					currentSpinner.Stop()
@@ -411,16 +457,15 @@ func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.C
 				}
 			}
 		},
-
 		// Tool call content handler - called when content accompanies tool calls
 		func(content string) {
-			if !quiet && cli != nil {
+			if !config.Quiet && cli != nil {
 				// Stop spinner before displaying content
 				if currentSpinner != nil {
 					currentSpinner.Stop()
 					currentSpinner = nil
 				}
-				cli.DisplayAssistantMessageWithModel(content, modelName)
+				cli.DisplayAssistantMessageWithModel(content, config.ModelName)
 				// Start spinner again for tool calls
 				currentSpinner = ui.NewSpinner("Thinking...")
 				currentSpinner.Start()
@@ -429,58 +474,33 @@ func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.C
 	)
 
 	// Make sure spinner is stopped if still running
-	if !quiet && cli != nil && currentSpinner != nil {
+	if !config.Quiet && cli != nil && currentSpinner != nil {
 		currentSpinner.Stop()
 	}
+
 	if err != nil {
-		if !quiet && cli != nil {
+		if !config.Quiet && cli != nil {
 			cli.DisplayError(fmt.Errorf("agent error: %v", err))
 		}
-		return err
+		return nil, err
 	}
 
 	// Display assistant response with model name (skip if quiet)
-	if !quiet && cli != nil {
-		if err := cli.DisplayAssistantMessageWithModel(response.Content, modelName); err != nil {
+	if !config.Quiet && cli != nil {
+		if err := cli.DisplayAssistantMessageWithModel(response.Content, config.ModelName); err != nil {
 			cli.DisplayError(fmt.Errorf("display error: %v", err))
-			return err
+			return nil, err
 		}
-	} else if quiet {
+	} else if config.Quiet {
 		// In quiet mode, only output the final response content to stdout
 		fmt.Print(response.Content)
 	}
 
-	// Add assistant response to history
-	messages = append(messages, response)
-
-	// If --no-exit flag is set, continue to interactive mode
-	if noExit && !quiet && cli != nil {
-		// Prepare data for slash commands in interactive mode
-		var serverNames []string
-		for name := range mcpConfig.MCPServers {
-			serverNames = append(serverNames, name)
-		}
-
-		tools := mcpAgent.GetTools()
-		var toolNames []string
-		for _, tool := range tools {
-			if info, err := tool.Info(ctx); err == nil {
-				toolNames = append(toolNames, info.Name)
-			}
-		}
-
-		// Continue to interactive mode
-		return runInteractiveMode(ctx, mcpAgent, cli, serverNames, toolNames, modelName, messages)
-	}
-
-	// Exit after displaying the final response (normal behavior)
-	return nil
+	return response, nil
 }
 
-// runInteractiveMode handles the interactive mode execution
-func runInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, serverNames, toolNames []string, modelName string, messages []*schema.Message) error {
-
-	// Main interaction loop
+// runInteractiveLoop handles the interactive portion of the agentic loop
+func runInteractiveLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, messages []*schema.Message, config AgenticLoopConfig) error {
 	for {
 		// Get user input
 		prompt, err := cli.GetPrompt()
@@ -498,7 +518,7 @@ func runInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 
 		// Handle slash commands
 		if cli.IsSlashCommand(prompt) {
-			if cli.HandleSlashCommand(prompt, serverNames, toolNames, messages) {
+			if cli.HandleSlashCommand(prompt, config.ServerNames, config.ToolNames, messages) {
 				continue
 			}
 			cli.DisplayError(fmt.Errorf("unknown command: %s", prompt))
@@ -511,82 +531,62 @@ func runInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 		// Add user message to history
 		messages = append(messages, schema.UserMessage(prompt))
 
-		// Get agent response with controlled spinner that stops for tool call display
-		var response *schema.Message
-		var currentSpinner *ui.Spinner
-
-		// Start initial spinner
-		currentSpinner = ui.NewSpinner("Thinking...")
-		currentSpinner.Start()
-
-		response, err = mcpAgent.GenerateWithLoop(ctx, messages,
-			// Tool call handler - called when a tool is about to be executed
-			func(toolName, toolArgs string) {
-				// Stop spinner before displaying tool call
-				if currentSpinner != nil {
-					currentSpinner.Stop()
-					currentSpinner = nil
-				}
-				cli.DisplayToolCallMessage(toolName, toolArgs)
-			},
-			// Tool execution handler - called when tool execution starts/ends
-			func(toolName string, isStarting bool) {
-				if isStarting {
-					// Start spinner for tool execution
-					currentSpinner = ui.NewSpinner(fmt.Sprintf("Executing %s...", toolName))
-					currentSpinner.Start()
-				} else {
-					// Stop spinner when tool execution completes
-					if currentSpinner != nil {
-						currentSpinner.Stop()
-						currentSpinner = nil
-					}
-				}
-			},
-			// Tool result handler - called when a tool execution completes
-			func(toolName, toolArgs, result string, isError bool) {
-				cli.DisplayToolMessage(toolName, toolArgs, result, isError)
-				// Start spinner again for next LLM call
-				currentSpinner = ui.NewSpinner("Thinking...")
-				currentSpinner.Start()
-			},
-			// Response handler - called when the LLM generates a response
-			func(content string) {
-				// Stop spinner when we get the final response
-				if currentSpinner != nil {
-					currentSpinner.Stop()
-					currentSpinner = nil
-				}
-			},
-			// Tool call content handler - called when content accompanies tool calls
-			func(content string) {
-				// Stop spinner before displaying content
-				if currentSpinner != nil {
-					currentSpinner.Stop()
-					currentSpinner = nil
-				}
-				cli.DisplayAssistantMessageWithModel(content, modelName)
-				// Start spinner again for tool calls
-				currentSpinner = ui.NewSpinner("Thinking...")
-				currentSpinner.Start()
-			},
-		)
-
-		// Make sure spinner is stopped if still running
-		if currentSpinner != nil {
-			currentSpinner.Stop()
-		}
+		// Process the user input with tool calls
+		response, err := runAgenticStep(ctx, mcpAgent, cli, messages, config)
 		if err != nil {
 			cli.DisplayError(fmt.Errorf("agent error: %v", err))
 			continue
 		}
 
-		// Display assistant response with model name
-		if err := cli.DisplayAssistantMessageWithModel(response.Content, modelName); err != nil {
-			cli.DisplayError(fmt.Errorf("display error: %v", err))
-		}
-
 		// Add assistant response to history
 		messages = append(messages, response)
 	}
+}
+
+// runNonInteractiveMode handles the non-interactive mode execution
+func runNonInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, prompt, modelName string, messages []*schema.Message, quiet, noExit bool, mcpConfig *config.Config) error {
+	// Prepare data for slash commands (needed if continuing to interactive mode)
+	var serverNames []string
+	for name := range mcpConfig.MCPServers {
+		serverNames = append(serverNames, name)
+	}
+
+	tools := mcpAgent.GetTools()
+	var toolNames []string
+	for _, tool := range tools {
+		if info, err := tool.Info(ctx); err == nil {
+			toolNames = append(toolNames, info.Name)
+		}
+	}
+
+	// Configure and run unified agentic loop
+	config := AgenticLoopConfig{
+		IsInteractive:    false,
+		InitialPrompt:    prompt,
+		ContinueAfterRun: noExit,
+		Quiet:            quiet,
+		ServerNames:      serverNames,
+		ToolNames:        toolNames,
+		ModelName:        modelName,
+		MCPConfig:        mcpConfig,
+	}
+
+	return runAgenticLoop(ctx, mcpAgent, cli, messages, config)
+}
+
+// runInteractiveMode handles the interactive mode execution
+func runInteractiveMode(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, serverNames, toolNames []string, modelName string, messages []*schema.Message) error {
+	// Configure and run unified agentic loop
+	config := AgenticLoopConfig{
+		IsInteractive:    true,
+		InitialPrompt:    "",
+		ContinueAfterRun: false,
+		Quiet:            false,
+		ServerNames:      serverNames,
+		ToolNames:        toolNames,
+		ModelName:        modelName,
+		MCPConfig:        nil, // Not needed for pure interactive mode
+	}
+
+	return runAgenticLoop(ctx, mcpAgent, cli, messages, config)
 }

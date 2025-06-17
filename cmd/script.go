@@ -4,11 +4,16 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strings"
 
+	"github.com/cloudwego/eino/schema"
+	"github.com/mark3labs/mcphost/internal/agent"
 	"github.com/mark3labs/mcphost/internal/config"
+	"github.com/mark3labs/mcphost/internal/models"
+	"github.com/mark3labs/mcphost/internal/ui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -174,29 +179,25 @@ func runScriptCommand(ctx context.Context, scriptFile string, variables map[stri
 		mergeScriptConfig(mcpConfig, scriptConfig)
 	}
 
-	// Override the global config for normal mode
-	scriptMCPConfig = mcpConfig
-
 	// Set script values in viper (only if flags weren't explicitly set)
 	setScriptValuesInViper(mcpConfig, cmd)
 
-	// Set the prompt flag if it was specified in the script and not overridden by command line
-	if mcpConfig.Prompt != "" && promptFlag == "" {
-		promptFlag = mcpConfig.Prompt
+	// Get final prompt - prioritize command line flag, then script content
+	finalPrompt := promptFlag
+	if finalPrompt == "" && mcpConfig.Prompt != "" {
+		finalPrompt = mcpConfig.Prompt
 	}
 
+	// Get final no-exit setting - prioritize command line flag, then script config
+	finalNoExit := noExitFlag || mcpConfig.NoExit
+
 	// Validate that --no-exit is only used when there's a prompt
-	if noExitFlag && promptFlag == "" {
+	if finalNoExit && finalPrompt == "" {
 		return fmt.Errorf("--no-exit flag can only be used when there's a prompt (either from script content or --prompt flag)")
 	}
 
-	// Clean up script config after execution
-	defer func() {
-		scriptMCPConfig = nil
-	}()
-
-	// Now run the normal execution path which will use our overridden config
-	return runNormalMode(ctx)
+	// Run the script using the unified agentic loop
+	return runScriptMode(ctx, mcpConfig, finalPrompt, finalNoExit)
 }
 
 func mergeScriptConfig(mcpConfig *config.Config, scriptConfig *config.Config) {
@@ -451,4 +452,192 @@ func substituteVariables(content string, variables map[string]string) string {
 		// If variable not found, leave it as is
 		return match
 	})
+}
+
+// runScriptMode executes the script using the unified agentic loop
+func runScriptMode(ctx context.Context, mcpConfig *config.Config, prompt string, noExit bool) error {
+	// Set up logging
+	if debugMode || mcpConfig.Debug {
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
+	}
+
+	// Get final values from viper and script config
+	finalModel := viper.GetString("model")
+	if finalModel == "" && mcpConfig.Model != "" {
+		finalModel = mcpConfig.Model
+	}
+	if finalModel == "" {
+		finalModel = "anthropic:claude-sonnet-4-20250514" // default
+	}
+
+	finalSystemPrompt := viper.GetString("system-prompt")
+	if finalSystemPrompt == "" && mcpConfig.SystemPrompt != "" {
+		finalSystemPrompt = mcpConfig.SystemPrompt
+	}
+
+	finalDebug := viper.GetBool("debug") || mcpConfig.Debug
+	finalMaxSteps := viper.GetInt("max-steps")
+	if finalMaxSteps == 0 && mcpConfig.MaxSteps != 0 {
+		finalMaxSteps = mcpConfig.MaxSteps
+	}
+
+	finalProviderURL := viper.GetString("provider-url")
+	if finalProviderURL == "" && mcpConfig.ProviderURL != "" {
+		finalProviderURL = mcpConfig.ProviderURL
+	}
+
+	finalProviderAPIKey := viper.GetString("provider-api-key")
+	if finalProviderAPIKey == "" && mcpConfig.ProviderAPIKey != "" {
+		finalProviderAPIKey = mcpConfig.ProviderAPIKey
+	}
+
+	finalMaxTokens := viper.GetInt("max-tokens")
+	if finalMaxTokens == 0 && mcpConfig.MaxTokens != 0 {
+		finalMaxTokens = mcpConfig.MaxTokens
+	}
+	if finalMaxTokens == 0 {
+		finalMaxTokens = 4096 // default
+	}
+
+	finalTemperature := float32(viper.GetFloat64("temperature"))
+	if finalTemperature == 0 && mcpConfig.Temperature != nil {
+		finalTemperature = *mcpConfig.Temperature
+	}
+	if finalTemperature == 0 {
+		finalTemperature = 0.7 // default
+	}
+
+	finalTopP := float32(viper.GetFloat64("top-p"))
+	if finalTopP == 0 && mcpConfig.TopP != nil {
+		finalTopP = *mcpConfig.TopP
+	}
+	if finalTopP == 0 {
+		finalTopP = 0.95 // default
+	}
+
+	finalTopK := int32(viper.GetInt("top-k"))
+	if finalTopK == 0 && mcpConfig.TopK != nil {
+		finalTopK = *mcpConfig.TopK
+	}
+	if finalTopK == 0 {
+		finalTopK = 40 // default
+	}
+
+	finalStopSequences := viper.GetStringSlice("stop-sequences")
+	if len(finalStopSequences) == 0 && len(mcpConfig.StopSequences) > 0 {
+		finalStopSequences = mcpConfig.StopSequences
+	}
+
+	// Load system prompt
+	systemPrompt, err := config.LoadSystemPrompt(finalSystemPrompt)
+	if err != nil {
+		return fmt.Errorf("failed to load system prompt: %v", err)
+	}
+
+	// Create model configuration
+	modelConfig := &models.ProviderConfig{
+		ModelString:    finalModel,
+		SystemPrompt:   systemPrompt,
+		ProviderAPIKey: finalProviderAPIKey,
+		ProviderURL:    finalProviderURL,
+		MaxTokens:      finalMaxTokens,
+		Temperature:    &finalTemperature,
+		TopP:           &finalTopP,
+		TopK:           &finalTopK,
+		StopSequences:  finalStopSequences,
+	}
+
+	// Create agent configuration
+	agentConfig := &agent.AgentConfig{
+		ModelConfig:  modelConfig,
+		MCPConfig:    mcpConfig,
+		SystemPrompt: systemPrompt,
+		MaxSteps:     finalMaxSteps,
+	}
+
+	// Create the agent
+	mcpAgent, err := agent.NewAgent(ctx, agentConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create agent: %v", err)
+	}
+	defer mcpAgent.Close()
+
+	// Get model name for display
+	parts := strings.SplitN(finalModel, ":", 2)
+	modelName := "Unknown"
+	if len(parts) == 2 {
+		modelName = parts[1]
+	}
+
+	// Create CLI interface (skip if quiet mode)
+	var cli *ui.CLI
+	if !quietFlag {
+		cli, err = ui.NewCLI(finalDebug)
+		if err != nil {
+			return fmt.Errorf("failed to create CLI: %v", err)
+		}
+
+		// Log successful initialization
+		if len(parts) == 2 {
+			cli.DisplayInfo(fmt.Sprintf("Model loaded: %s (%s)", parts[0], parts[1]))
+		}
+
+		tools := mcpAgent.GetTools()
+		cli.DisplayInfo(fmt.Sprintf("Loaded %d tools from MCP servers", len(tools)))
+
+		// Display debug configuration if debug mode is enabled
+		if finalDebug {
+			debugConfig := map[string]any{
+				"model":         finalModel,
+				"max-steps":     finalMaxSteps,
+				"max-tokens":    finalMaxTokens,
+				"temperature":   finalTemperature,
+				"top-p":         finalTopP,
+				"top-k":         finalTopK,
+				"provider-url":  finalProviderURL,
+				"system-prompt": finalSystemPrompt,
+			}
+
+			// Only include non-empty stop sequences
+			if len(finalStopSequences) > 0 {
+				debugConfig["stop-sequences"] = finalStopSequences
+			}
+
+			// Only include API keys if they're set (but don't show the actual values for security)
+			if finalProviderAPIKey != "" {
+				debugConfig["provider-api-key"] = "[SET]"
+			}
+
+			cli.DisplayDebugConfig(debugConfig)
+		}
+	}
+
+	// Prepare data for slash commands
+	var serverNames []string
+	for name := range mcpConfig.MCPServers {
+		serverNames = append(serverNames, name)
+	}
+
+	tools := mcpAgent.GetTools()
+	var toolNames []string
+	for _, tool := range tools {
+		if info, err := tool.Info(ctx); err == nil {
+			toolNames = append(toolNames, info.Name)
+		}
+	}
+
+	// Configure and run unified agentic loop
+	var messages []*schema.Message
+	config := AgenticLoopConfig{
+		IsInteractive:    prompt == "", // If no prompt, start in interactive mode
+		InitialPrompt:    prompt,
+		ContinueAfterRun: noExit,
+		Quiet:            quietFlag,
+		ServerNames:      serverNames,
+		ToolNames:        toolNames,
+		ModelName:        modelName,
+		MCPConfig:        mcpConfig,
+	}
+
+	return runAgenticLoop(ctx, mcpAgent, cli, messages, config)
 }
