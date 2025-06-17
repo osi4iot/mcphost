@@ -84,6 +84,12 @@ func initConfig() {
 		// Use config file from the flag
 		viper.SetConfigFile(configFile)
 	} else {
+		// Ensure a config file exists (create default if none found)
+		if err := config.EnsureConfigExists(); err != nil {
+			// If we can't create config, continue silently (non-fatal)
+			fmt.Fprintf(os.Stderr, "Warning: Could not create default config file: %v\n", err)
+		}
+
 		// Find home directory
 		home, err := os.UserHomeDir()
 		if err != nil {

@@ -154,6 +154,31 @@ func LoadSystemPrompt(input string) (string, error) {
 	return input, nil
 }
 
+// EnsureConfigExists checks if a config file exists and creates a default one if not
+func EnsureConfigExists() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("error getting home directory: %v", err)
+	}
+
+	// Check for existing config files (new format first, then legacy)
+	configNames := []string{".mcphost", ".mcp"}
+	configTypes := []string{"yaml", "json"}
+
+	for _, configName := range configNames {
+		for _, configType := range configTypes {
+			configPath := filepath.Join(homeDir, configName+"."+configType)
+			if _, err := os.Stat(configPath); err == nil {
+				// Config file exists, no need to create
+				return nil
+			}
+		}
+	}
+
+	// No config file found, create default
+	return createDefaultConfig(homeDir)
+}
+
 // createDefaultConfig creates a default .mcphost.yml file in the user's home directory
 func createDefaultConfig(homeDir string) error {
 	configPath := filepath.Join(homeDir, ".mcphost.yml")

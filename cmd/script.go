@@ -68,7 +68,6 @@ This will replace ${directory} with "/tmp" and ${name} with "John" in the script
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
 	rootCmd.AddCommand(scriptCmd)
 
 	// Add the same flags as the root command, but they will override script settings
