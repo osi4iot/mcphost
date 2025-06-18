@@ -69,37 +69,6 @@ This will replace ${directory} with "/tmp" and ${name} with "John" in the script
 
 func init() {
 	rootCmd.AddCommand(scriptCmd)
-
-	// Add the same flags as the root command, but they will override script settings
-	scriptCmd.Flags().StringVar(&systemPromptFile, "system-prompt", "", "system prompt text or path to text file")
-	scriptCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "model to use (format: provider:model)")
-	scriptCmd.Flags().BoolVar(&debugMode, "debug", false, "enable debug logging")
-	scriptCmd.Flags().StringVarP(&promptFlag, "prompt", "p", "", "override the prompt from the script file")
-	scriptCmd.Flags().BoolVar(&quietFlag, "quiet", false, "suppress all output")
-	scriptCmd.Flags().BoolVar(&noExitFlag, "no-exit", false, "prevent script from exiting, show input prompt instead")
-	scriptCmd.Flags().IntVar(&maxSteps, "max-steps", 0, "maximum number of agent steps (0 for unlimited)")
-	scriptCmd.Flags().StringVar(&providerURL, "provider-url", "", "base URL for the provider API (applies to OpenAI, Anthropic, Ollama, and Google)")
-	scriptCmd.Flags().StringVar(&providerAPIKey, "provider-api-key", "", "API key for the provider (applies to OpenAI, Anthropic, and Google)")
-
-	// Model generation parameters
-	scriptCmd.Flags().IntVar(&maxTokens, "max-tokens", 4096, "maximum number of tokens in the response")
-	scriptCmd.Flags().Float32Var(&temperature, "temperature", 0.7, "controls randomness in responses (0.0-1.0)")
-	scriptCmd.Flags().Float32Var(&topP, "top-p", 0.95, "controls diversity via nucleus sampling (0.0-1.0)")
-	scriptCmd.Flags().Int32Var(&topK, "top-k", 40, "controls diversity by limiting top K tokens to sample from")
-	scriptCmd.Flags().StringSliceVar(&stopSequences, "stop-sequences", nil, "custom stop sequences (comma-separated)")
-
-	// Bind script command flags to viper so they have proper precedence
-	viper.BindPFlag("system-prompt", scriptCmd.Flags().Lookup("system-prompt"))
-	viper.BindPFlag("model", scriptCmd.Flags().Lookup("model"))
-	viper.BindPFlag("debug", scriptCmd.Flags().Lookup("debug"))
-	viper.BindPFlag("max-steps", scriptCmd.Flags().Lookup("max-steps"))
-	viper.BindPFlag("provider-url", scriptCmd.Flags().Lookup("provider-url"))
-	viper.BindPFlag("provider-api-key", scriptCmd.Flags().Lookup("provider-api-key"))
-	viper.BindPFlag("max-tokens", scriptCmd.Flags().Lookup("max-tokens"))
-	viper.BindPFlag("temperature", scriptCmd.Flags().Lookup("temperature"))
-	viper.BindPFlag("top-p", scriptCmd.Flags().Lookup("top-p"))
-	viper.BindPFlag("top-k", scriptCmd.Flags().Lookup("top-k"))
-	viper.BindPFlag("stop-sequences", scriptCmd.Flags().Lookup("stop-sequences"))
 }
 
 // overrideConfigWithFrontmatter parses the script file and overrides viper config with frontmatter values
@@ -114,40 +83,45 @@ func overrideConfigWithFrontmatter(scriptFile string, variables map[string]strin
 	}
 
 	// Override viper values with frontmatter values (only if flags weren't explicitly set)
-	if scriptConfig.Model != "" && !cmd.Flags().Changed("model") {
+	// Check both local flags and persistent flags since script inherits from root
+	flagChanged := func(name string) bool {
+		return cmd.Flags().Changed(name) || rootCmd.PersistentFlags().Changed(name)
+	}
+
+	if scriptConfig.Model != "" && !flagChanged("model") {
 		viper.Set("model", scriptConfig.Model)
 	}
-	if scriptConfig.MaxSteps != 0 && !cmd.Flags().Changed("max-steps") {
+	if scriptConfig.MaxSteps != 0 && !flagChanged("max-steps") {
 		viper.Set("max-steps", scriptConfig.MaxSteps)
 	}
-	if scriptConfig.Debug && !cmd.Flags().Changed("debug") {
+	if scriptConfig.Debug && !flagChanged("debug") {
 		viper.Set("debug", scriptConfig.Debug)
 	}
-	if scriptConfig.SystemPrompt != "" && !cmd.Flags().Changed("system-prompt") {
+	if scriptConfig.SystemPrompt != "" && !flagChanged("system-prompt") {
 		viper.Set("system-prompt", scriptConfig.SystemPrompt)
 	}
-	if scriptConfig.ProviderAPIKey != "" && !cmd.Flags().Changed("provider-api-key") {
+	if scriptConfig.ProviderAPIKey != "" && !flagChanged("provider-api-key") {
 		viper.Set("provider-api-key", scriptConfig.ProviderAPIKey)
 	}
-	if scriptConfig.ProviderURL != "" && !cmd.Flags().Changed("provider-url") {
+	if scriptConfig.ProviderURL != "" && !flagChanged("provider-url") {
 		viper.Set("provider-url", scriptConfig.ProviderURL)
 	}
-	if scriptConfig.MaxTokens != 0 && !cmd.Flags().Changed("max-tokens") {
+	if scriptConfig.MaxTokens != 0 && !flagChanged("max-tokens") {
 		viper.Set("max-tokens", scriptConfig.MaxTokens)
 	}
-	if scriptConfig.Temperature != nil && !cmd.Flags().Changed("temperature") {
+	if scriptConfig.Temperature != nil && !flagChanged("temperature") {
 		viper.Set("temperature", *scriptConfig.Temperature)
 	}
-	if scriptConfig.TopP != nil && !cmd.Flags().Changed("top-p") {
+	if scriptConfig.TopP != nil && !flagChanged("top-p") {
 		viper.Set("top-p", *scriptConfig.TopP)
 	}
-	if scriptConfig.TopK != nil && !cmd.Flags().Changed("top-k") {
+	if scriptConfig.TopK != nil && !flagChanged("top-k") {
 		viper.Set("top-k", *scriptConfig.TopK)
 	}
-	if len(scriptConfig.StopSequences) > 0 && !cmd.Flags().Changed("stop-sequences") {
+	if len(scriptConfig.StopSequences) > 0 && !flagChanged("stop-sequences") {
 		viper.Set("stop-sequences", scriptConfig.StopSequences)
 	}
-	if scriptConfig.NoExit && !cmd.Flags().Changed("no-exit") {
+	if scriptConfig.NoExit && !flagChanged("no-exit") {
 		// Set the global noExitFlag variable if it wasn't explicitly set via command line
 		noExitFlag = scriptConfig.NoExit
 	}
