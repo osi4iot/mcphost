@@ -45,6 +45,32 @@ func CreateProvider(ctx context.Context, config *ProviderConfig) (model.ToolCall
 	provider := parts[0]
 	modelName := parts[1]
 
+	// Get the global registry for validation
+	registry := GetGlobalRegistry()
+
+	// Validate the model exists (skip for ollama as it's not in models.dev)
+	if provider != "ollama" {
+		modelInfo, err := registry.ValidateModel(provider, modelName)
+		if err != nil {
+			// Provide helpful suggestions
+			suggestions := registry.SuggestModels(provider, modelName)
+			if len(suggestions) > 0 {
+				return nil, fmt.Errorf("%v. Did you mean one of: %s", err, strings.Join(suggestions, ", "))
+			}
+			return nil, err
+		}
+
+		// Validate environment variables
+		if err := registry.ValidateEnvironment(provider, config.ProviderAPIKey); err != nil {
+			return nil, err
+		}
+
+		// Validate configuration parameters against model capabilities
+		if err := validateModelConfig(config, modelInfo); err != nil {
+			return nil, err
+		}
+	}
+
 	switch provider {
 	case "anthropic":
 		return createAnthropicProvider(ctx, config, modelName)
@@ -57,6 +83,22 @@ func CreateProvider(ctx context.Context, config *ProviderConfig) (model.ToolCall
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", provider)
 	}
+}
+
+// validateModelConfig validates configuration parameters against model capabilities
+func validateModelConfig(config *ProviderConfig, modelInfo *ModelInfo) error {
+	// Check if temperature is supported
+	if config.Temperature != nil && !modelInfo.Temperature {
+		return fmt.Errorf("model %s does not support temperature parameter", modelInfo.ID)
+	}
+
+	// Warn about context limits if MaxTokens is set too high
+	if config.MaxTokens > modelInfo.Limit.Output {
+		return fmt.Errorf("max_tokens (%d) exceeds model's output limit (%d) for %s",
+			config.MaxTokens, modelInfo.Limit.Output, modelInfo.ID)
+	}
+
+	return nil
 }
 
 func createAnthropicProvider(ctx context.Context, config *ProviderConfig, modelName string) (model.ToolCallingChatModel, error) {
