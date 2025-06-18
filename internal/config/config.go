@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/spf13/viper"
 )
 
 // MCPServerConfig represents configuration for an MCP server
@@ -50,89 +48,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// SystemPromptConfig represents system prompt configuration
-type SystemPromptConfig struct {
-	SystemPrompt string `json:"systemPrompt"`
-}
 
-// LoadMCPConfig loads MCP configuration from file
-func LoadMCPConfig(configFile string) (*Config, error) {
-	return LoadMCPConfigWithViper(configFile, nil)
-}
-
-// LoadMCPConfigWithViper loads MCP configuration from file using the provided viper instance
-func LoadMCPConfigWithViper(configFile string, v *viper.Viper) (*Config, error) {
-	if v == nil {
-		v = viper.New()
-	}
-
-	if configFile == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("error getting home directory: %v", err)
-		}
-
-		// Try .mcphost files first (new format), then .mcp files (backwards compatibility)
-		configNames := []string{".mcphost", ".mcp"}
-		configTypes := []string{"yaml", "json"}
-
-		var configFound bool
-		for _, configName := range configNames {
-			for _, configType := range configTypes {
-				v.SetConfigName(configName)
-				v.SetConfigType(configType)
-				v.AddConfigPath(homeDir)
-
-				if err := v.ReadInConfig(); err == nil {
-					configFound = true
-					break
-				}
-			}
-			if configFound {
-				break
-			}
-		}
-
-		if !configFound {
-			// Create default config file
-			if err := createDefaultConfig(homeDir); err != nil {
-				// If we can't create the file, just return default config
-				return &Config{
-					MCPServers: make(map[string]MCPServerConfig),
-				}, nil
-			}
-
-			// Try to load the newly created config
-			v.SetConfigName(".mcphost")
-			v.SetConfigType("yaml")
-			v.AddConfigPath(homeDir)
-			if err := v.ReadInConfig(); err != nil {
-				// If we still can't read it, return default config
-				return &Config{
-					MCPServers: make(map[string]MCPServerConfig),
-				}, nil
-			}
-		}
-	} else {
-		// Use specified config file
-		v.SetConfigFile(configFile)
-		if err := v.ReadInConfig(); err != nil {
-			return nil, fmt.Errorf("error reading config file: %v", err)
-		}
-	}
-
-	var config Config
-	if err := v.Unmarshal(&config); err != nil {
-		return nil, fmt.Errorf("error parsing config file: %v", err)
-	}
-
-	// Validate that allowedTools and excludedTools are mutually exclusive
-	if err := config.Validate(); err != nil {
-		return nil, err
-	}
-
-	return &config, nil
-}
 
 // LoadSystemPrompt loads system prompt from file or returns the string directly
 func LoadSystemPrompt(input string) (string, error) {
