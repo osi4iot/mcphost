@@ -52,7 +52,7 @@ func (c *CLI) GetPrompt() (string, error) {
 
 	var prompt string
 	err := huh.NewForm(huh.NewGroup(huh.NewText().
-		Title("Enter your prompt (Type /help for commands, Ctrl+C to quit)").
+		Title("Enter your prompt (Type /help for commands, Ctrl+C to quit, ESC to cancel generation)").
 		Value(&prompt).
 		CharLimit(5000)),
 	).WithWidth(c.width).
@@ -152,6 +152,13 @@ func (c *CLI) DisplayInfo(message string) {
 	c.displayContainer()
 }
 
+// DisplayCancellation displays a cancellation message
+func (c *CLI) DisplayCancellation() {
+	msg := c.messageRenderer.RenderSystemMessage("Generation cancelled by user (ESC pressed)", time.Now())
+	c.messageContainer.AddMessage(msg)
+	c.displayContainer()
+}
+
 // DisplayDebugConfig displays configuration settings in debug mode using tool response block styling
 func (c *CLI) DisplayDebugConfig(config map[string]any) {
 	msg := c.messageRenderer.RenderDebugConfigMessage(config, time.Now())
@@ -169,6 +176,7 @@ func (c *CLI) DisplayHelp() {
 - ` + "`/history`" + `: Display conversation history
 - ` + "`/quit`" + `: Exit the application
 - ` + "`Ctrl+C`" + `: Exit at any time
+- ` + "`ESC`" + `: Cancel ongoing LLM generation
 
 You can also just type your message to chat with the AI assistant.`
 

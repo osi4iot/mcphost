@@ -384,6 +384,11 @@ func runAgenticLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 		// Process the initial prompt with tool calls
 		response, err := runAgenticStep(ctx, mcpAgent, cli, messages, config)
 		if err != nil {
+			// Check if this was a user cancellation
+			if err.Error() == "generation cancelled by user" && cli != nil {
+				cli.DisplayCancellation()
+				return nil // Don't treat cancellation as an error for exit code
+			}
 			return err
 		}
 
@@ -536,17 +541,23 @@ func runInteractiveLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 		// Display user message
 		cli.DisplayUserMessage(prompt)
 
-		// Add user message to history
-		messages = append(messages, schema.UserMessage(prompt))
+		// Create temporary messages with user input for processing
+		tempMessages := append(messages, schema.UserMessage(prompt))
 
 		// Process the user input with tool calls
-		response, err := runAgenticStep(ctx, mcpAgent, cli, messages, config)
+		response, err := runAgenticStep(ctx, mcpAgent, cli, tempMessages, config)
 		if err != nil {
-			cli.DisplayError(fmt.Errorf("agent error: %v", err))
+			// Check if this was a user cancellation
+			if err.Error() == "generation cancelled by user" {
+				cli.DisplayCancellation()
+			} else {
+				cli.DisplayError(fmt.Errorf("agent error: %v", err))
+			}
 			continue
 		}
 
-		// Add assistant response to history
+		// Only add to history after successful completion
+		messages = append(messages, schema.UserMessage(prompt))
 		messages = append(messages, response)
 	}
 }

@@ -48,8 +48,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-
-
 // LoadSystemPrompt loads system prompt from file or returns the string directly
 func LoadSystemPrompt(input string) (string, error) {
 	if input == "" {
