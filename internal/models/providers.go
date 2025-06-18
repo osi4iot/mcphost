@@ -87,9 +87,9 @@ func CreateProvider(ctx context.Context, config *ProviderConfig) (model.ToolCall
 
 // validateModelConfig validates configuration parameters against model capabilities
 func validateModelConfig(config *ProviderConfig, modelInfo *ModelInfo) error {
-	// Check if temperature is supported
+	// Omit temperature if not supported by the model
 	if config.Temperature != nil && !modelInfo.Temperature {
-		return fmt.Errorf("model %s does not support temperature parameter", modelInfo.ID)
+		config.Temperature = nil
 	}
 
 	// Warn about context limits if MaxTokens is set too high
@@ -162,16 +162,35 @@ func createOpenAIProvider(ctx context.Context, config *ProviderConfig, modelName
 		openaiConfig.BaseURL = config.ProviderURL
 	}
 
+	// Check if this is a reasoning model to handle beta limitations
+	registry := GetGlobalRegistry()
+	isReasoningModel := false
+	if modelInfo, err := registry.ValidateModel("openai", modelName); err == nil && modelInfo.Reasoning {
+		isReasoningModel = true
+	}
+
 	if config.MaxTokens > 0 {
-		openaiConfig.MaxTokens = &config.MaxTokens
+		if isReasoningModel {
+			// For reasoning models, use MaxCompletionTokens instead of MaxTokens
+			if openaiConfig.ExtraFields == nil {
+				openaiConfig.ExtraFields = make(map[string]any)
+			}
+			openaiConfig.ExtraFields["max_completion_tokens"] = config.MaxTokens
+		} else {
+			// For non-reasoning models, use MaxTokens as usual
+			openaiConfig.MaxTokens = &config.MaxTokens
+		}
 	}
 
-	if config.Temperature != nil {
-		openaiConfig.Temperature = config.Temperature
-	}
+	// For reasoning models, skip temperature and top_p due to beta limitations
+	if !isReasoningModel {
+		if config.Temperature != nil {
+			openaiConfig.Temperature = config.Temperature
+		}
 
-	if config.TopP != nil {
-		openaiConfig.TopP = config.TopP
+		if config.TopP != nil {
+			openaiConfig.TopP = config.TopP
+		}
 	}
 
 	if len(config.StopSequences) > 0 {

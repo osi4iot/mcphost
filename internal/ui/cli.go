@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cloudwego/eino/schema"
-	"github.com/mark3labs/mcphost/internal/tokens"
 	"golang.org/x/term"
 )
 
@@ -324,10 +322,30 @@ func (c *CLI) UpdateUsage(inputText, outputText string) {
 	}
 }
 
-// UpdateUsageWithMessages updates the usage tracker using custom token counting for messages
-func (c *CLI) UpdateUsageWithMessages(ctx context.Context, messages []tokens.Message, outputText string) {
-	if c.usageTracker != nil {
-		c.usageTracker.CountAndUpdateUsage(ctx, messages, outputText)
+
+
+// UpdateUsageFromResponse updates the usage tracker using token usage from response metadata
+func (c *CLI) UpdateUsageFromResponse(response *schema.Message, inputText string) {
+	if c.usageTracker == nil {
+		return
+	}
+
+	// Try to extract token usage from response metadata
+	if response.ResponseMeta != nil && response.ResponseMeta.Usage != nil {
+		usage := response.ResponseMeta.Usage
+		
+		// Use actual token counts from the response
+		inputTokens := int(usage.PromptTokens)
+		outputTokens := int(usage.CompletionTokens)
+		
+		// Handle cache tokens if available (some providers support this)
+		cacheReadTokens := 0
+		cacheWriteTokens := 0
+		
+		c.usageTracker.UpdateUsage(inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens)
+	} else {
+		// Fallback to estimation if no metadata is available
+		c.usageTracker.EstimateAndUpdateUsage(inputText, response.Content)
 	}
 }
 

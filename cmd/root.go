@@ -538,7 +538,7 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 					break
 				}
 			}
-			cli.UpdateUsage(lastUserMessage, response.Content)
+			cli.UpdateUsageFromResponse(response, lastUserMessage)
 		}
 	} else if config.Quiet {
 		// In quiet mode, only output the final response content to stdout

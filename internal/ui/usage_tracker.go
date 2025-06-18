@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"fmt"
 	"sync"
 
@@ -102,30 +101,15 @@ func (ut *UsageTracker) UpdateUsage(inputTokens, outputTokens, cacheReadTokens, 
 
 // EstimateAndUpdateUsage estimates tokens from text and updates usage
 func (ut *UsageTracker) EstimateAndUpdateUsage(inputText, outputText string) {
-	inputTokens := EstimateTokens(inputText)
-	outputTokens := EstimateTokens(outputText)
+	inputTokens := tokens.EstimateTokens(inputText)
+	outputTokens := tokens.EstimateTokens(outputText)
 	ut.UpdateUsage(inputTokens, outputTokens, 0, 0)
 }
 
-// CountAndUpdateUsage counts tokens using provider-specific counters and updates usage
-func (ut *UsageTracker) CountAndUpdateUsage(ctx context.Context, messages []tokens.Message, outputText string) {
-	// Count input tokens using provider-specific counter
-	tokenCount, err := tokens.CountTokensGlobal(ctx, ut.provider, messages, ut.modelInfo.ID)
-	var inputTokens int
-	if err != nil {
-		// Fallback to estimation if token counting fails
-		var totalInput string
-		for _, msg := range messages {
-			totalInput += msg.Content
-		}
-		inputTokens = EstimateTokens(totalInput)
-	} else {
-		inputTokens = tokenCount.InputTokens
-	}
-
-	// Estimate output tokens (providers typically don't count output tokens separately)
-	outputTokens := EstimateTokens(outputText)
-	
+// EstimateAndUpdateUsageFromText estimates tokens from text and updates usage
+func (ut *UsageTracker) EstimateAndUpdateUsageFromText(inputText, outputText string) {
+	inputTokens := tokens.EstimateTokens(inputText)
+	outputTokens := tokens.EstimateTokens(outputText)
 	ut.UpdateUsage(inputTokens, outputTokens, 0, 0)
 }
 
