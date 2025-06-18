@@ -77,7 +77,7 @@ func EnsureConfigExists() error {
 
 	// Check for existing config files (new format first, then legacy)
 	configNames := []string{".mcphost", ".mcp"}
-	configTypes := []string{"yaml", "json"}
+	configTypes := []string{"yml", "yaml", "json"}
 
 	for _, configName := range configNames {
 		for _, configType := range configTypes {
