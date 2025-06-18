@@ -22,6 +22,7 @@ var (
 type CLI struct {
 	messageRenderer  *MessageRenderer
 	messageContainer *MessageContainer
+	usageTracker     *UsageTracker
 	width            int
 	height           int
 }
@@ -36,8 +37,24 @@ func NewCLI(debug bool) (*CLI, error) {
 	return cli, nil
 }
 
+// SetUsageTracker sets the usage tracker for the CLI
+func (c *CLI) SetUsageTracker(tracker *UsageTracker) {
+	c.usageTracker = tracker
+	if c.usageTracker != nil {
+		c.usageTracker.SetWidth(c.width)
+	}
+}
+
 // GetPrompt gets user input using the huh library with divider and padding
 func (c *CLI) GetPrompt() (string, error) {
+	// Display usage info if available
+	if c.usageTracker != nil {
+		usageInfo := c.usageTracker.RenderUsageInfo()
+		if usageInfo != "" {
+			fmt.Print(usageInfo)
+		}
+	}
+
 	// Create a divider before the input
 	dividerStyle := lipgloss.NewStyle().
 		Width(c.width).
@@ -174,6 +191,9 @@ func (c *CLI) DisplayHelp() {
 - ` + "`/tools`" + `: List all available tools
 - ` + "`/servers`" + `: List configured MCP servers
 - ` + "`/history`" + `: Display conversation history
+- ` + "`/usage`" + `: Show token usage and cost statistics
+- ` + "`/reset-usage`" + `: Reset usage statistics
+- ` + "`/clear`" + `: Clear message history
 - ` + "`/quit`" + `: Exit the application
 - ` + "`Ctrl+C`" + `: Exit at any time
 - ` + "`ESC`" + `: Cancel ongoing LLM generation
@@ -267,6 +287,12 @@ func (c *CLI) HandleSlashCommand(input string, servers []string, tools []string,
 	case "/clear":
 		c.ClearMessages()
 		return true
+	case "/usage":
+		c.DisplayUsageStats()
+		return true
+	case "/reset-usage":
+		c.ResetUsageStats()
+		return true
 	case "/quit":
 		fmt.Println("\nGoodbye!")
 		os.Exit(0)
@@ -289,6 +315,50 @@ func (c *CLI) displayContainer() {
 	fmt.Print(c.messageContainer.Render())
 }
 
+// UpdateUsage updates the usage tracker with token counts and costs
+func (c *CLI) UpdateUsage(inputText, outputText string) {
+	if c.usageTracker != nil {
+		c.usageTracker.EstimateAndUpdateUsage(inputText, outputText)
+	}
+}
+
+// DisplayUsageStats displays current usage statistics
+func (c *CLI) DisplayUsageStats() {
+	if c.usageTracker == nil {
+		c.DisplayInfo("Usage tracking is not available for this model.")
+		return
+	}
+
+	sessionStats := c.usageTracker.GetSessionStats()
+	lastStats := c.usageTracker.GetLastRequestStats()
+
+	var content strings.Builder
+	content.WriteString("## Usage Statistics\n\n")
+
+	if lastStats != nil {
+		content.WriteString(fmt.Sprintf("**Last Request:** %d input + %d output tokens = $%.6f\n",
+			lastStats.InputTokens, lastStats.OutputTokens, lastStats.TotalCost))
+	}
+
+	content.WriteString(fmt.Sprintf("**Session Total:** %d input + %d output tokens = $%.6f (%d requests)\n",
+		sessionStats.TotalInputTokens, sessionStats.TotalOutputTokens, sessionStats.TotalCost, sessionStats.RequestCount))
+
+	msg := c.messageRenderer.RenderSystemMessage(content.String(), time.Now())
+	c.messageContainer.AddMessage(msg)
+	c.displayContainer()
+}
+
+// ResetUsageStats resets the usage tracking statistics
+func (c *CLI) ResetUsageStats() {
+	if c.usageTracker == nil {
+		c.DisplayInfo("Usage tracking is not available for this model.")
+		return
+	}
+
+	c.usageTracker.Reset()
+	c.DisplayInfo("Usage statistics have been reset.")
+}
+
 // updateSize updates the CLI size based on terminal dimensions
 func (c *CLI) updateSize() {
 	width, height, err := term.GetSize(int(os.Stdout.Fd()))
@@ -307,5 +377,8 @@ func (c *CLI) updateSize() {
 	}
 	if c.messageContainer != nil {
 		c.messageContainer.SetSize(c.width, c.height-4)
+	}
+	if c.usageTracker != nil {
+		c.usageTracker.SetWidth(c.width)
 	}
 }

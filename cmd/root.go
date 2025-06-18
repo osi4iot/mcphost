@@ -284,6 +284,21 @@ func runNormalMode(ctx context.Context) error {
 			return fmt.Errorf("failed to create CLI: %v", err)
 		}
 
+		// Set up usage tracking for supported providers
+		if len(parts) == 2 {
+			provider := parts[0]
+			modelID := parts[1]
+
+			// Skip usage tracking for ollama as it's not in models.dev
+			if provider != "ollama" {
+				registry := models.GetGlobalRegistry()
+				if modelInfo, err := registry.ValidateModel(provider, modelID); err == nil {
+					usageTracker := ui.NewUsageTracker(modelInfo, 80) // Will be updated with actual width
+					cli.SetUsageTracker(usageTracker)
+				}
+			}
+		}
+
 		// Log successful initialization
 		if len(parts) == 2 {
 			cli.DisplayInfo(fmt.Sprintf("Model loaded: %s (%s)", parts[0], parts[1]))
@@ -507,6 +522,19 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 		if err := cli.DisplayAssistantMessageWithModel(response.Content, config.ModelName); err != nil {
 			cli.DisplayError(fmt.Errorf("display error: %v", err))
 			return nil, err
+		}
+
+		// Update usage tracking with the last user message and response
+		if len(messages) > 0 {
+			lastUserMessage := ""
+			// Find the last user message
+			for i := len(messages) - 1; i >= 0; i-- {
+				if messages[i].Role == schema.User {
+					lastUserMessage = messages[i].Content
+					break
+				}
+			}
+			cli.UpdateUsage(lastUserMessage, response.Content)
 		}
 	} else if config.Quiet {
 		// In quiet mode, only output the final response content to stdout
