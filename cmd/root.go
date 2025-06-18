@@ -12,6 +12,7 @@ import (
 	"github.com/mark3labs/mcphost/internal/agent"
 	"github.com/mark3labs/mcphost/internal/config"
 	"github.com/mark3labs/mcphost/internal/models"
+	"github.com/mark3labs/mcphost/internal/tokens"
 	"github.com/mark3labs/mcphost/internal/ui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -183,6 +184,9 @@ func runMCPHost(ctx context.Context) error {
 }
 
 func runNormalMode(ctx context.Context) error {
+	// Initialize token counters
+	tokens.InitializeTokenCounters()
+
 	// Validate flag combinations
 	if quietFlag && promptFlag == "" {
 		return fmt.Errorf("--quiet flag can only be used with --prompt/-p")
@@ -293,7 +297,7 @@ func runNormalMode(ctx context.Context) error {
 			if provider != "ollama" {
 				registry := models.GetGlobalRegistry()
 				if modelInfo, err := registry.ValidateModel(provider, modelID); err == nil {
-					usageTracker := ui.NewUsageTracker(modelInfo, 80) // Will be updated with actual width
+					usageTracker := ui.NewUsageTracker(modelInfo, provider, 80) // Will be updated with actual width
 					cli.SetUsageTracker(usageTracker)
 				}
 			}

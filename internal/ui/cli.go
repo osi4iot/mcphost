@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cloudwego/eino/schema"
+	"github.com/mark3labs/mcphost/internal/tokens"
 	"golang.org/x/term"
 )
 
@@ -319,6 +321,13 @@ func (c *CLI) displayContainer() {
 func (c *CLI) UpdateUsage(inputText, outputText string) {
 	if c.usageTracker != nil {
 		c.usageTracker.EstimateAndUpdateUsage(inputText, outputText)
+	}
+}
+
+// UpdateUsageWithMessages updates the usage tracker using custom token counting for messages
+func (c *CLI) UpdateUsageWithMessages(ctx context.Context, messages []tokens.Message, outputText string) {
+	if c.usageTracker != nil {
+		c.usageTracker.CountAndUpdateUsage(ctx, messages, outputText)
 	}
 }
 
