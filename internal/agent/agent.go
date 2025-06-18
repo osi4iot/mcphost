@@ -215,7 +215,31 @@ func (a *Agent) generateWithCancellation(ctx context.Context, messages []*schema
 		err     error
 	}, 1)
 
-	// Start the LLM generation in a goroutine
+	// Start ESC key listener first and wait for it to be ready
+	escChan := make(chan bool, 1)
+	stopListening := make(chan bool, 1)
+	escReady := make(chan bool, 1)
+
+	go func() {
+		if a.listenForESC(stopListening, escReady) {
+			escChan <- true
+		} else {
+			escChan <- false
+		}
+	}()
+
+	// Wait for ESC listener to be ready before starting LLM
+	select {
+	case <-escReady:
+		// ESC listener is ready, proceed
+	case <-time.After(100 * time.Millisecond):
+		// Timeout waiting for ESC listener, proceed anyway
+	case <-ctx.Done():
+		close(stopListening)
+		return nil, ctx.Err()
+	}
+
+	// Now start the LLM generation
 	go func() {
 		message, err := a.model.Generate(llmCtx, messages, model.WithTools(toolInfos))
 		if err != nil {
@@ -225,18 +249,6 @@ func (a *Agent) generateWithCancellation(ctx context.Context, messages []*schema
 			message *schema.Message
 			err     error
 		}{message, err}
-	}()
-
-	// Start ESC key listener (Bubble Tea handles all the complexity)
-	escChan := make(chan bool, 1)
-	stopListening := make(chan bool, 1)
-
-	go func() {
-		if a.listenForESC(stopListening) {
-			escChan <- true
-		} else {
-			escChan <- false
-		}
 	}()
 
 	// Wait for either LLM completion or ESC key
@@ -289,7 +301,7 @@ func (m escListenerModel) View() string {
 }
 
 // listenForESC listens for ESC key press using Bubble Tea and returns true if detected
-func (a *Agent) listenForESC(stopChan chan bool) bool {
+func (a *Agent) listenForESC(stopChan chan bool, readyChan chan bool) bool {
 	escPressed := make(chan bool, 1)
 
 	model := escListenerModel{
@@ -307,6 +319,15 @@ func (a *Agent) listenForESC(stopChan chan bool) bool {
 			case escPressed <- false:
 			default:
 			}
+		}
+	}()
+
+	// Give the program a moment to initialize, then signal ready
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		select {
+		case readyChan <- true:
+		default:
 		}
 	}()
 
