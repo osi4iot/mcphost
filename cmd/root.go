@@ -163,6 +163,7 @@ func init() {
 	viper.BindPFlag("system-prompt", rootCmd.PersistentFlags().Lookup("system-prompt"))
 	viper.BindPFlag("model", rootCmd.PersistentFlags().Lookup("model"))
 	viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
+	viper.BindPFlag("prompt", rootCmd.PersistentFlags().Lookup("prompt"))
 	viper.BindPFlag("max-steps", rootCmd.PersistentFlags().Lookup("max-steps"))
 	viper.BindPFlag("provider-url", rootCmd.PersistentFlags().Lookup("provider-url"))
 	viper.BindPFlag("provider-api-key", rootCmd.PersistentFlags().Lookup("provider-api-key"))
@@ -378,31 +379,34 @@ func runAgenticLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 			cli.DisplayUserMessage(config.InitialPrompt)
 		}
 
-		// Add user message to history
-		messages = append(messages, schema.UserMessage(config.InitialPrompt))
+		// Create temporary messages with user input for processing (don't add to history yet)
+		tempMessages := append(messages, schema.UserMessage(config.InitialPrompt))
 
 		// Process the initial prompt with tool calls
-		response, err := runAgenticStep(ctx, mcpAgent, cli, messages, config)
+		response, err := runAgenticStep(ctx, mcpAgent, cli, tempMessages, config)
 		if err != nil {
 			// Check if this was a user cancellation
 			if err.Error() == "generation cancelled by user" && cli != nil {
 				cli.DisplayCancellation()
-				return nil // Don't treat cancellation as an error for exit code
+				// On cancellation, continue to interactive mode (like --no-exit)
+				// Don't add the cancelled message to history
+				config.IsInteractive = true
+			} else {
+				return err
 			}
-			return err
+		} else {
+			// Only add to history after successful completion
+			messages = append(messages, schema.UserMessage(config.InitialPrompt))
+			messages = append(messages, response)
+
+			// If not continuing to interactive mode, exit here
+			if !config.ContinueAfterRun {
+				return nil
+			}
+
+			// Update config for interactive mode continuation
+			config.IsInteractive = true
 		}
-
-		// Add assistant response to history
-		messages = append(messages, response)
-
-		// If not continuing to interactive mode, exit here
-		if !config.ContinueAfterRun {
-			return nil
-		}
-
-		// Update config for interactive mode continuation
-		config.IsInteractive = true
-		config.Quiet = false // Can't be quiet in interactive mode
 	}
 
 	// Interactive loop (or continuation after non-interactive)
