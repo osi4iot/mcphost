@@ -199,19 +199,16 @@ func runScriptCommand(ctx context.Context, scriptFile string, variables map[stri
 	var mcpConfig *config.Config
 	if len(scriptConfig.MCPServers) > 0 {
 		// Use MCP servers from script, but get other config values from viper
-		mcpConfig = &config.Config{
-			MCPServers: scriptConfig.MCPServers,
-		}
+		// First, unmarshal all config from viper
+		mcpConfig = &config.Config{}
 		if err := viper.Unmarshal(mcpConfig); err != nil {
 			return fmt.Errorf("failed to unmarshal config: %v", err)
 		}
-		// Restore the MCP servers from script (viper.Unmarshal might have overwritten them)
+		// Then completely override MCPServers with script's servers
 		mcpConfig.MCPServers = scriptConfig.MCPServers
 	} else {
 		// Get MCP config from the global viper instance (already loaded by initConfig)
-		mcpConfig = &config.Config{
-			MCPServers: make(map[string]config.MCPServerConfig),
-		}
+		mcpConfig = &config.Config{}
 		if err := viper.Unmarshal(mcpConfig); err != nil {
 			return fmt.Errorf("failed to unmarshal MCP config: %v", err)
 		}
