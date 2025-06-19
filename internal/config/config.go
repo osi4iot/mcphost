@@ -9,6 +9,7 @@ import (
 
 // MCPServerConfig represents configuration for an MCP server
 type MCPServerConfig struct {
+	Transport     string         `json:"transport,omitempty"`
 	Command       string         `json:"command,omitempty"`
 	Args          []string       `json:"args,omitempty"`
 	Env           map[string]any `json:"env,omitempty"`
@@ -38,11 +39,40 @@ type Config struct {
 	StopSequences []string `json:"stop-sequences,omitempty" yaml:"stop-sequences,omitempty"`
 }
 
+// GetTransportType returns the transport type for the server config
+func (s *MCPServerConfig) GetTransportType() string {
+	if s.Transport != "" {
+		return s.Transport
+	}
+	// Backward compatibility: infer transport type
+	if s.Command != "" {
+		return "stdio"
+	}
+	if s.URL != "" {
+		return "sse"
+	}
+	return "stdio" // default
+}
+
 // Validate validates the configuration
 func (c *Config) Validate() error {
 	for serverName, serverConfig := range c.MCPServers {
 		if len(serverConfig.AllowedTools) > 0 && len(serverConfig.ExcludedTools) > 0 {
 			return fmt.Errorf("server %s: allowedTools and excludedTools are mutually exclusive", serverName)
+		}
+
+		transport := serverConfig.GetTransportType()
+		switch transport {
+		case "stdio":
+			if serverConfig.Command == "" {
+				return fmt.Errorf("server %s: command is required for stdio transport", serverName)
+			}
+		case "sse", "streamable":
+			if serverConfig.URL == "" {
+				return fmt.Errorf("server %s: url is required for %s transport", serverName, transport)
+			}
+		default:
+			return fmt.Errorf("server %s: unsupported transport type '%s'. Supported types: stdio, sse, streamable", serverName, transport)
 		}
 	}
 	return nil
@@ -110,14 +140,27 @@ func createDefaultConfig(homeDir string) error {
 
 # MCP Servers configuration
 # Add your MCP servers here
-# Example:
+# Examples for different transport types:
 # mcpServers:
+#   # STDIO transport (default) - launches local processes
 #   filesystem:
 #     command: npx
 #     args: ["@modelcontextprotocol/server-filesystem", "/path/to/allowed/files"]
 #   sqlite:
 #     command: uvx
 #     args: ["mcp-server-sqlite", "--db-path", "/tmp/example.db"]
+#   
+#   # SSE transport - connects to remote servers via Server-Sent Events
+#   remote-sse:
+#     transport: sse
+#     url: "https://api.example.com/sse"
+#     headers: ["Authorization: Bearer your-token"]
+#   
+#   # Streamable HTTP transport - connects via Streamable HTTP protocol
+#   websearch:
+#     transport: streamable
+#     url: "https://api.example.com/mcp"
+#     headers: ["Authorization: Bearer your-api-token"]
 
 mcpServers:
 

@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcphost/internal/config"
 )
@@ -192,7 +194,10 @@ func (m *MCPToolManager) shouldExcludeTool(toolName string, serverConfig config.
 }
 
 func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string, serverConfig config.MCPServerConfig) (client.MCPClient, error) {
-	if serverConfig.Command != "" {
+	transportType := serverConfig.GetTransportType()
+
+	switch transportType {
+	case "stdio":
 		// STDIO client
 		env := make([]string, 0, len(serverConfig.Env))
 		for k, v := range serverConfig.Env {
@@ -200,7 +205,8 @@ func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string,
 		}
 
 		return client.NewStdioMCPClient(serverConfig.Command, env, serverConfig.Args...)
-	} else if serverConfig.URL != "" {
+
+	case "sse":
 		// SSE client
 		sseClient, err := client.NewSSEMCPClient(serverConfig.URL)
 		if err != nil {
@@ -213,9 +219,42 @@ func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string,
 		}
 
 		return sseClient, nil
-	}
 
-	return nil, fmt.Errorf("invalid server configuration for %s: must specify either command or url", serverName)
+	case "streamable":
+		// Streamable HTTP client
+		var options []transport.StreamableHTTPCOption
+
+		// Add headers if specified
+		if len(serverConfig.Headers) > 0 {
+			headers := make(map[string]string)
+			for _, header := range serverConfig.Headers {
+				parts := strings.SplitN(header, ":", 2)
+				if len(parts) == 2 {
+					key := strings.TrimSpace(parts[0])
+					value := strings.TrimSpace(parts[1])
+					headers[key] = value
+				}
+			}
+			if len(headers) > 0 {
+				options = append(options, transport.WithHTTPHeaders(headers))
+			}
+		}
+
+		streamableClient, err := client.NewStreamableHttpClient(serverConfig.URL, options...)
+		if err != nil {
+			return nil, err
+		}
+
+		// Start the streamable HTTP client
+		if err := streamableClient.Start(ctx); err != nil {
+			return nil, fmt.Errorf("failed to start streamable HTTP client: %v", err)
+		}
+
+		return streamableClient, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported transport type '%s' for server %s", transportType, serverName)
+	}
 }
 
 func (m *MCPToolManager) initializeClient(ctx context.Context, client client.MCPClient) error {

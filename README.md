@@ -151,6 +151,40 @@ Each SSE entry requires:
 - `url`: The URL where the MCP server is accessible. 
 - `headers`: (Optional) Array of headers that will be attached to the requests
 
+### Streamable HTTP
+
+For Streamable HTTP transport, use the following configuration:
+```json
+{
+  "mcpServers": {
+    "websearch": {
+      "transport": "streamable",
+      "url": "https://api.example.com/mcp",
+      "headers": [
+        "Authorization: Bearer your-api-token",
+        "Content-Type: application/json"
+      ]
+    }
+  }
+}
+```
+
+Each Streamable HTTP entry requires:
+- `transport`: Must be set to `"streamable"`
+- `url`: The URL where the MCP server is accessible
+- `headers`: (Optional) Array of headers that will be attached to the requests
+
+### Transport Types
+
+MCPHost supports three transport types:
+- **`stdio`** (default): Launches a local process and communicates via stdin/stdout
+- **`sse`**: Connects to a server using Server-Sent Events
+- **`streamable`**: Connects to a server using Streamable HTTP protocol
+
+If no `transport` field is specified, MCPHost will automatically detect the transport type:
+- If `command` is present → `stdio`
+- If `url` is present → `sse`
+
 ### System Prompt
 
 You can specify a custom system prompt using the `--system-prompt` flag. You can either:
