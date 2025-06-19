@@ -84,6 +84,12 @@ func initConfig() {
 	if configFile != "" {
 		// Use config file from the flag
 		viper.SetConfigFile(configFile)
+		
+		// Try to read the specified config file
+		if err := viper.ReadInConfig(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading config file '%s': %v\n", configFile, err)
+			os.Exit(1)
+		}
 	} else {
 		// Ensure a config file exists (create default if none found)
 		if err := config.EnsureConfigExists(); err != nil {
