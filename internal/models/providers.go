@@ -48,8 +48,8 @@ func CreateProvider(ctx context.Context, config *ProviderConfig) (model.ToolCall
 	// Get the global registry for validation
 	registry := GetGlobalRegistry()
 
-	// Validate the model exists (skip for ollama as it's not in models.dev)
-	if provider != "ollama" {
+	// Validate the model exists (skip for ollama as it's not in models.dev, and skip when using custom provider URL)
+	if provider != "ollama" && config.ProviderURL == "" {
 		modelInfo, err := registry.ValidateModel(provider, modelName)
 		if err != nil {
 			// Provide helpful suggestions
@@ -162,11 +162,13 @@ func createOpenAIProvider(ctx context.Context, config *ProviderConfig, modelName
 		openaiConfig.BaseURL = config.ProviderURL
 	}
 
-	// Check if this is a reasoning model to handle beta limitations
+	// Check if this is a reasoning model to handle beta limitations (skip validation if using custom URL)
 	registry := GetGlobalRegistry()
 	isReasoningModel := false
-	if modelInfo, err := registry.ValidateModel("openai", modelName); err == nil && modelInfo.Reasoning {
-		isReasoningModel = true
+	if config.ProviderURL == "" {
+		if modelInfo, err := registry.ValidateModel("openai", modelName); err == nil && modelInfo.Reasoning {
+			isReasoningModel = true
+		}
 	}
 
 	if config.MaxTokens > 0 {
