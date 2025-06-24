@@ -100,6 +100,9 @@ func (a *Agent) GenerateWithLoop(ctx context.Context, messages []*schema.Message
 		if err != nil {
 			continue
 		}
+		if info == nil {
+			continue
+		}
 		toolInfos = append(toolInfos, info)
 		toolMap[info.Name] = t
 	}
