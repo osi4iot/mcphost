@@ -15,8 +15,7 @@ func TestMCPToolManager_LoadTools_WithTimeout(t *testing.T) {
 	cfg := &config.Config{
 		MCPServers: map[string]config.MCPServerConfig{
 			"test-server": {
-				Command: "non-existent-command",
-				Args:    []string{"arg1", "arg2"},
+				Command: []string{"non-existent-command", "arg1", "arg2"},
 			},
 		},
 	}
@@ -50,12 +49,10 @@ func TestMCPToolManager_LoadTools_GracefulFailure(t *testing.T) {
 	cfg := &config.Config{
 		MCPServers: map[string]config.MCPServerConfig{
 			"bad-server-1": {
-				Command: "non-existent-command-1",
-				Args:    []string{"arg1"},
+				Command: []string{"non-existent-command-1", "arg1"},
 			},
 			"bad-server-2": {
-				Command: "non-existent-command-2",
-				Args:    []string{"arg2"},
+				Command: []string{"non-existent-command-2", "arg2"},
 			},
 		},
 	}

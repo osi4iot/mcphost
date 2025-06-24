@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,14 +10,75 @@ import (
 
 // MCPServerConfig represents configuration for an MCP server
 type MCPServerConfig struct {
+	Type          string            `json:"type"`
+	Command       []string          `json:"command,omitempty"`
+	Environment   map[string]string `json:"environment,omitempty"`
+	URL           string            `json:"url,omitempty"`
+	AllowedTools  []string          `json:"allowedTools,omitempty"`
+	ExcludedTools []string          `json:"excludedTools,omitempty"`
+	
+	// Legacy fields for backward compatibility
 	Transport     string         `json:"transport,omitempty"`
-	Command       string         `json:"command,omitempty"`
 	Args          []string       `json:"args,omitempty"`
 	Env           map[string]any `json:"env,omitempty"`
-	URL           string         `json:"url,omitempty"`
 	Headers       []string       `json:"headers,omitempty"`
-	AllowedTools  []string       `json:"allowedTools,omitempty"`
-	ExcludedTools []string       `json:"excludedTools,omitempty"`
+}
+
+// UnmarshalJSON handles both new and legacy config formats
+func (s *MCPServerConfig) UnmarshalJSON(data []byte) error {
+	// First try to unmarshal as the new format
+	type newFormat struct {
+		Type          string            `json:"type"`
+		Command       []string          `json:"command,omitempty"`
+		Environment   map[string]string `json:"environment,omitempty"`
+		URL           string            `json:"url,omitempty"`
+		AllowedTools  []string          `json:"allowedTools,omitempty"`
+		ExcludedTools []string          `json:"excludedTools,omitempty"`
+	}
+	
+	// Also try legacy format
+	type legacyFormat struct {
+		Transport     string         `json:"transport,omitempty"`
+		Command       string         `json:"command,omitempty"`
+		Args          []string       `json:"args,omitempty"`
+		Env           map[string]any `json:"env,omitempty"`
+		URL           string         `json:"url,omitempty"`
+		Headers       []string       `json:"headers,omitempty"`
+		AllowedTools  []string       `json:"allowedTools,omitempty"`
+		ExcludedTools []string       `json:"excludedTools,omitempty"`
+	}
+	
+	// Try new format first
+	var newConfig newFormat
+	if err := json.Unmarshal(data, &newConfig); err == nil && newConfig.Type != "" {
+		s.Type = newConfig.Type
+		s.Command = newConfig.Command
+		s.Environment = newConfig.Environment
+		s.URL = newConfig.URL
+		s.AllowedTools = newConfig.AllowedTools
+		s.ExcludedTools = newConfig.ExcludedTools
+		return nil
+	}
+	
+	// Fall back to legacy format
+	var legacyConfig legacyFormat
+	if err := json.Unmarshal(data, &legacyConfig); err != nil {
+		return err
+	}
+	
+	// Convert legacy format to new format
+	s.Transport = legacyConfig.Transport
+	if legacyConfig.Command != "" {
+		s.Command = append([]string{legacyConfig.Command}, legacyConfig.Args...)
+	}
+	s.Args = legacyConfig.Args
+	s.Env = legacyConfig.Env
+	s.URL = legacyConfig.URL
+	s.Headers = legacyConfig.Headers
+	s.AllowedTools = legacyConfig.AllowedTools
+	s.ExcludedTools = legacyConfig.ExcludedTools
+	
+	return nil
 }
 
 // Config represents the application configuration
@@ -41,11 +103,24 @@ type Config struct {
 
 // GetTransportType returns the transport type for the server config
 func (s *MCPServerConfig) GetTransportType() string {
+	// New simplified format
+	if s.Type != "" {
+		switch s.Type {
+		case "local":
+			return "stdio"
+		case "remote":
+			return "streamable"
+		default:
+			return s.Type
+		}
+	}
+	
+	// Legacy format support
 	if s.Transport != "" {
 		return s.Transport
 	}
 	// Backward compatibility: infer transport type
-	if s.Command != "" {
+	if len(s.Command) > 0 {
 		return "stdio"
 	}
 	if s.URL != "" {
@@ -64,7 +139,8 @@ func (c *Config) Validate() error {
 		transport := serverConfig.GetTransportType()
 		switch transport {
 		case "stdio":
-			if serverConfig.Command == "" {
+			// Check both new and legacy command formats
+			if len(serverConfig.Command) == 0 && serverConfig.Transport == "" {
 				return fmt.Errorf("server %s: command is required for stdio transport", serverName)
 			}
 		case "sse", "streamable":
@@ -140,27 +216,29 @@ func createDefaultConfig(homeDir string) error {
 
 # MCP Servers configuration
 # Add your MCP servers here
-# Examples for different transport types:
+# Examples for different server types:
 # mcpServers:
-#   # STDIO transport (default) - launches local processes
+#   # Local servers - run commands locally
 #   filesystem:
-#     command: npx
-#     args: ["@modelcontextprotocol/server-filesystem", "/path/to/allowed/files"]
+#     type: "local"
+#     command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/files"]
+#     environment:
+#       MY_ENV_VAR: "my_env_var_value"
 #   sqlite:
-#     command: uvx
-#     args: ["mcp-server-sqlite", "--db-path", "/tmp/example.db"]
+#     type: "local"
+#     command: ["uvx", "mcp-server-sqlite", "--db-path", "/tmp/example.db"]
 #   
-#   # SSE transport - connects to remote servers via Server-Sent Events
-#   remote-sse:
-#     transport: sse
-#     url: "https://api.example.com/sse"
-#     headers: ["Authorization: Bearer your-token"]
-#   
-#   # Streamable HTTP transport - connects via Streamable HTTP protocol
+#   # Remote servers - connect via StreamableHTTP
 #   websearch:
-#     transport: streamable
+#     type: "remote"
 #     url: "https://api.example.com/mcp"
-#     headers: ["Authorization: Bearer your-api-token"]
+#   
+#   # Legacy format still supported for backward compatibility:
+#   # legacy-server:
+#   #   command: npx
+#   #   args: ["@modelcontextprotocol/server-filesystem", "/path"]
+#   #   env:
+#   #     MY_VAR: "value"
 
 mcpServers:
 

@@ -218,12 +218,33 @@ func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string,
 	switch transportType {
 	case "stdio":
 		// STDIO client
-		env := make([]string, 0, len(serverConfig.Env))
-		for k, v := range serverConfig.Env {
-			env = append(env, fmt.Sprintf("%s=%v", k, v))
+		var env []string
+		var command string
+		var args []string
+		
+		// Handle command and environment
+		if len(serverConfig.Command) > 0 {
+			command = serverConfig.Command[0]
+			if len(serverConfig.Command) > 1 {
+				args = serverConfig.Command[1:]
+			}
+		}
+		
+		// Convert environment variables
+		if serverConfig.Environment != nil {
+			for k, v := range serverConfig.Environment {
+				env = append(env, fmt.Sprintf("%s=%s", k, v))
+			}
+		}
+		
+		// Legacy environment support
+		if serverConfig.Env != nil {
+			for k, v := range serverConfig.Env {
+				env = append(env, fmt.Sprintf("%s=%v", k, v))
+			}
 		}
 
-		stdioClient, err := client.NewStdioMCPClient(serverConfig.Command, env, serverConfig.Args...)
+		stdioClient, err := client.NewStdioMCPClient(command, env, args...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create stdio client: %v", err)
 		}

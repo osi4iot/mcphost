@@ -83,7 +83,7 @@ go install github.com/mark3labs/mcphost@latest
 
 ## Configuration ⚙️
 
-### MCP-server
+### MCP Servers
 MCPHost will automatically create a configuration file in your home directory if it doesn't exist. It looks for config files in this order:
 - `.mcphost.yml` or `.mcphost.json` (preferred)
 - `.mcp.yml` or `.mcp.json` (backwards compatibility)
@@ -94,96 +94,122 @@ MCPHost will automatically create a configuration file in your home directory if
 
 You can also specify a custom location using the `--config` flag.
 
-#### STDIO
-The configuration for an STDIO MCP-server should be defined as the following:
+### Simplified Configuration Schema
+
+MCPHost now supports a simplified configuration schema with two server types:
+
+#### Local Servers
+For local MCP servers that run commands on your machine:
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "environment": {
+        "DEBUG": "true",
+        "LOG_LEVEL": "info"
+      },
+      "allowedTools": ["read_file", "write_file"],
+      "excludedTools": ["delete_file"]
+    },
+    "sqlite": {
+      "type": "local",
+      "command": ["uvx", "mcp-server-sqlite", "--db-path", "/tmp/foo.db"],
+      "environment": {
+        "SQLITE_DEBUG": "1"
+      }
+    }
+  }
+}
+```
+
+Each local server entry requires:
+- `type`: Must be set to `"local"`
+- `command`: Array containing the command and all its arguments
+- `environment`: (Optional) Object with environment variables as key-value pairs
+- `allowedTools`: (Optional) Array of tool names to include (whitelist)
+- `excludedTools`: (Optional) Array of tool names to exclude (blacklist)
+
+#### Remote Servers
+For remote MCP servers accessible via HTTP:
+```json
+{
+  "mcpServers": {
+    "websearch": {
+      "type": "remote",
+      "url": "https://api.example.com/mcp"
+    },
+    "weather": {
+      "type": "remote", 
+      "url": "https://weather-mcp.example.com"
+    }
+  }
+}
+```
+
+Each remote server entry requires:
+- `type`: Must be set to `"remote"`
+- `url`: The URL where the MCP server is accessible
+
+Remote servers automatically use the StreamableHTTP transport for optimal performance.
+
+**Note**: `allowedTools` and `excludedTools` are mutually exclusive - you can only use one per server.
+
+### Legacy Configuration Support
+
+MCPHost maintains full backward compatibility with the previous configuration format:
+
+#### Legacy STDIO Format
 ```json
 {
   "mcpServers": {
     "sqlite": {
       "command": "uvx",
-      "args": [
-        "mcp-server-sqlite",
-        "--db-path",
-        "/tmp/foo.db"
-      ]
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/tmp"
-      ],
-      "allowedTools": ["read_file", "write_file"],
-      "excludedTools": ["delete_file"]
+      "args": ["mcp-server-sqlite", "--db-path", "/tmp/foo.db"],
+      "env": {
+        "DEBUG": "true"
+      }
     }
   }
 }
 ```
 
-Each STDIO entry requires:
-- `command`: The command to run (e.g., `uvx`, `npx`) 
-- `args`: Array of arguments for the command:
-  - For SQLite server: `mcp-server-sqlite` with database path
-  - For filesystem server: `@modelcontextprotocol/server-filesystem` with directory path
-- `allowedTools`: (Optional) Array of tool names to include (whitelist)
-- `excludedTools`: (Optional) Array of tool names to exclude (blacklist)
-
-**Note**: `allowedTools` and `excludedTools` are mutually exclusive - you can only use one per server.
-
-### Server Side Events (SSE) 
-
-For SSE the following config should be used:
+#### Legacy SSE Format
 ```json
 {
   "mcpServers": {
     "server_name": {
-      "url": "http://some_jhost:8000/sse",
-      "headers":[
-        "Authorization: Bearer my-token"
-       ]
+      "url": "http://some_host:8000/sse",
+      "headers": ["Authorization: Bearer my-token"]
     }
   }
 }
 ```
 
-Each SSE entry requires:
-- `url`: The URL where the MCP server is accessible. 
-- `headers`: (Optional) Array of headers that will be attached to the requests
-
-### Streamable HTTP
-
-For Streamable HTTP transport, use the following configuration:
+#### Legacy Streamable HTTP Format
 ```json
 {
   "mcpServers": {
     "websearch": {
       "transport": "streamable",
       "url": "https://api.example.com/mcp",
-      "headers": [
-        "Authorization: Bearer your-api-token",
-        "Content-Type: application/json"
-      ]
+      "headers": ["Authorization: Bearer your-api-token"]
     }
   }
 }
 ```
 
-Each Streamable HTTP entry requires:
-- `transport`: Must be set to `"streamable"`
-- `url`: The URL where the MCP server is accessible
-- `headers`: (Optional) Array of headers that will be attached to the requests
-
 ### Transport Types
 
 MCPHost supports three transport types:
-- **`stdio`** (default): Launches a local process and communicates via stdin/stdout
-- **`sse`**: Connects to a server using Server-Sent Events
-- **`streamable`**: Connects to a server using Streamable HTTP protocol
+- **`stdio`**: Launches a local process and communicates via stdin/stdout (used by `"local"` servers)
+- **`sse`**: Connects to a server using Server-Sent Events (legacy format)
+- **`streamable`**: Connects to a server using Streamable HTTP protocol (used by `"remote"` servers)
 
-If no `transport` field is specified, MCPHost will automatically detect the transport type:
-- If `command` is present → `stdio`
-- If `url` is present → `sse`
+The simplified schema automatically maps:
+- `"local"` type → `stdio` transport
+- `"remote"` type → `streamable` transport
 
 ### System Prompt
 
@@ -253,9 +279,8 @@ Scripts combine YAML configuration with prompts in a single executable file. The
 # This script uses the container-use MCP server from https://github.com/dagger/container-use
 mcpServers:
   container-use:
-    command: cu
-    args:
-      - "stdio"
+    type: "local"
+    command: ["cu", "stdio"]
 prompt: |
   Create 2 variations of a simple hello world app using Flask and FastAPI. 
   Each in their own environment. Give me the URL of each app
@@ -270,9 +295,8 @@ Or alternatively, omit the `prompt:` field and place the prompt after the frontm
 # This script uses the container-use MCP server from https://github.com/dagger/container-use
 mcpServers:
   container-use:
-    command: cu
-    args:
-      - "stdio"
+    type: "local"
+    command: ["cu", "stdio"]
 ---
 Create 2 variations of a simple hello world app using Flask and FastAPI. 
 Each in their own environment. Give me the URL of each app
@@ -293,8 +317,8 @@ Example script with variables:
 ---
 mcpServers:
   filesystem:
-    command: npx
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "${directory}"]
+    type: "local"
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "${directory}"]
 ---
 Hello ${name}! Please list the files in ${directory} and tell me about them.
 ```
@@ -422,11 +446,16 @@ All command-line flags can be configured via the config file. MCPHost will look 
 
 Example config file (`~/.mcphost.yml`):
 ```yaml
-# MCP Servers
+# MCP Servers - New Simplified Format
 mcpServers:
   filesystem:
-    command: npx
-    args: ["@modelcontextprotocol/server-filesystem", "/path/to/files"]
+    type: "local"
+    command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/files"]
+    environment:
+      DEBUG: "true"
+  websearch:
+    type: "remote"
+    url: "https://api.example.com/mcp"
 
 # Application settings
 model: "anthropic:claude-sonnet-4-20250514"

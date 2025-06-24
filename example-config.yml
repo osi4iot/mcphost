@@ -1,0 +1,33 @@
+# Example MCPHost Configuration with Simplified Schema
+# This demonstrates the new simplified local/remote server configuration
+
+mcpServers:
+  # Local MCP server - runs a command locally
+  filesystem:
+    type: "local"
+    command: ["npx", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    environment:
+      DEBUG: "true"
+      LOG_LEVEL: "info"
+  
+  # Another local server with different command
+  sqlite:
+    type: "local" 
+    command: ["uvx", "mcp-server-sqlite", "--db-path", "/tmp/example.db"]
+    environment:
+      SQLITE_DEBUG: "1"
+  
+  # Remote MCP server - connects via StreamableHTTP
+  websearch:
+    type: "remote"
+    url: "https://api.example.com/mcp"
+  
+  # Another remote server
+  weather:
+    type: "remote"
+    url: "https://weather-mcp.example.com"
+
+# Application settings
+model: "anthropic:claude-sonnet-4-20250514"
+max-steps: 10
+debug: false

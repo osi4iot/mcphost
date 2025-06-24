@@ -1,30 +1,53 @@
-# Agent Development Guide
+# MCPHost Development Context
 
 ## Build/Test Commands
-- **Build**: `go build -o mcphost .` or `go install`
-- **Run**: `go run main.go` or `./mcphost`
+- **Build**: `go build -o output/mcphost` or use `./contribute/build.sh`
 - **Test**: `go test ./...` (run all tests)
-- **Test single package**: `go test ./internal/config`
-- **Lint**: `go vet ./...` and `gofmt -s -w .`
-- **Dependencies**: `go mod tidy` and `go mod download`
+- **Test single package**: `go test ./pkg/llm/anthropic`
+- **Lint**: `go vet ./...` (built-in Go linter)
+- **Format**: `go fmt ./...`
+- **Dependencies**: `go mod tidy`
 
 ## Code Style Guidelines
-- **Imports**: Standard library first, then third-party, then local packages (separated by blank lines)
-- **Naming**: Use camelCase for variables/functions, PascalCase for exported types
+- **Package structure**: `pkg/` for reusable packages, `cmd/` for CLI commands
+- **Imports**: Standard library first, then third-party, then local packages with blank lines between groups
+- **Naming**: Use camelCase for unexported, PascalCase for exported; descriptive names (e.g., `CreateMessage`, `mcpClients`)
+- **Interfaces**: Keep small and focused (e.g., `llm.Provider`, `llm.Message`)
 - **Error handling**: Always check errors, wrap with context using `fmt.Errorf("context: %v", err)`
-- **Comments**: Use `//` for single line, document exported functions/types
-- **Structs**: Use struct tags for JSON/YAML serialization (`json:"field" yaml:"field"`)
-- **Interfaces**: Keep interfaces small and focused (e.g., `tool.BaseTool`, `model.ToolCallingChatModel`)
+- **Logging**: Use `github.com/charmbracelet/log` with structured logging: `log.Info("message", "key", value)`
+- **Types**: Prefer `any` over `interface{}` (modernize hint from linter)
+- **JSON tags**: Use snake_case for JSON fields, include omitempty where appropriate
+- **Context**: Always pass `context.Context` as first parameter for operations that may block
 
-## Architecture
-- **cmd/**: CLI commands and flag handling using Cobra
-- **internal/**: Private application code (agent, config, models, tools, ui)
-- **main.go**: Entry point, delegates to cmd package
-- **go.mod**: Go 1.23+ required, uses Eino framework for LLM integration
+## Architecture Notes
+- Multi-provider LLM support (Anthropic, OpenAI, Ollama, Google)
+- MCP (Model Context Protocol) client-server architecture for tool integration
+- Provider pattern for LLM abstraction with common `llm.Provider` interface
+- History management with message pruning based on configurable window size
+- Tool calling support across all providers with unified `llm.Tool` interface
 
-## Key Patterns
-- Use context.Context for cancellation and timeouts
-- Implement proper resource cleanup with defer statements
-- Use viper for configuration management (supports YAML/JSON)
-- Follow MCP (Model Context Protocol) for tool integration
-- Use structured logging and error wrapping
+## MCP Configuration Schema
+MCPHost supports a simplified configuration schema with two server types:
+
+### New Simplified Format
+- **Local servers** (`"type": "local"`): Run commands locally via stdio transport
+  - `command`: Array of command and arguments (e.g., `["npx", "server", "args"]`)
+  - `environment`: Key-value map of environment variables
+- **Remote servers** (`"type": "remote"`): Connect via StreamableHTTP transport
+  - `url`: Server endpoint URL
+  - Automatically uses StreamableHTTP for optimal performance
+
+### Legacy Format Support
+- Maintains full backward compatibility with existing configurations
+- Automatic detection and conversion of legacy formats
+- Custom `UnmarshalJSON` method handles format migration seamlessly
+
+### Transport Mapping
+- `"local"` type → `stdio` transport (launches local processes)
+- `"remote"` type → `streamable` transport (StreamableHTTP protocol)
+- Legacy `transport` field still supported for backward compatibility
+
+### Configuration Files
+- Primary: `~/.mcphost.yml` or `~/.mcphost.json`
+- Legacy: `~/.mcp.yml` or `~/.mcp.json`
+- Custom location via `--config` flag
