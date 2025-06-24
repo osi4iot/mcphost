@@ -96,7 +96,7 @@ You can also specify a custom location using the `--config` flag.
 
 ### Simplified Configuration Schema
 
-MCPHost now supports a simplified configuration schema with two server types:
+MCPHost now supports a simplified configuration schema with three server types:
 
 #### Local Servers
 For local MCP servers that run commands on your machine:
@@ -154,6 +154,60 @@ Each remote server entry requires:
 
 Remote servers automatically use the StreamableHTTP transport for optimal performance.
 
+#### Builtin Servers
+For builtin MCP servers that run in-process for optimal performance:
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "type": "builtin",
+      "name": "fs",
+      "options": {
+        "allowed_directories": ["/tmp", "/home/user/documents"]
+      },
+      "allowedTools": ["read_file", "write_file", "list_directory"]
+    },
+    "filesystem-cwd": {
+      "type": "builtin",
+      "name": "fs"
+    }
+  }
+}
+```
+
+Each builtin server entry requires:
+- `type`: Must be set to `"builtin"`
+- `name`: Internal name of the builtin server (e.g., `"fs"` for filesystem)
+- `options`: Configuration options specific to the builtin server
+
+**Available Builtin Servers:**
+- `fs` (filesystem): Secure filesystem access with configurable allowed directories
+  - `allowed_directories`: Array of directory paths that the server can access (defaults to current working directory if not specified)
+
+### Tool Filtering
+
+All MCP server types support tool filtering to restrict which tools are available:
+
+- **`allowedTools`**: Whitelist - only specified tools are available from the server
+- **`excludedTools`**: Blacklist - all tools except specified ones are available
+
+```json
+{
+  "mcpServers": {
+    "filesystem-readonly": {
+      "type": "builtin",
+      "name": "fs",
+      "allowedTools": ["read_file", "list_directory"]
+    },
+    "filesystem-safe": {
+      "type": "local", 
+      "command": ["npx", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "excludedTools": ["delete_file"]
+    }
+  }
+}
+```
+
 **Note**: `allowedTools` and `excludedTools` are mutually exclusive - you can only use one per server.
 
 ### Legacy Configuration Support
@@ -202,14 +256,16 @@ MCPHost maintains full backward compatibility with the previous configuration fo
 
 ### Transport Types
 
-MCPHost supports three transport types:
+MCPHost supports four transport types:
 - **`stdio`**: Launches a local process and communicates via stdin/stdout (used by `"local"` servers)
 - **`sse`**: Connects to a server using Server-Sent Events (legacy format)
 - **`streamable`**: Connects to a server using Streamable HTTP protocol (used by `"remote"` servers)
+- **`inprocess`**: Runs builtin servers in-process for optimal performance (used by `"builtin"` servers)
 
 The simplified schema automatically maps:
 - `"local"` type → `stdio` transport
 - `"remote"` type → `streamable` transport
+- `"builtin"` type → `inprocess` transport
 
 ### System Prompt
 
@@ -448,11 +504,16 @@ Example config file (`~/.mcphost.yml`):
 ```yaml
 # MCP Servers - New Simplified Format
 mcpServers:
-  filesystem:
+  filesystem-local:
     type: "local"
     command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/files"]
     environment:
       DEBUG: "true"
+  filesystem-builtin:
+    type: "builtin"
+    name: "fs"
+    options:
+      allowed_directories: ["/tmp", "/home/user/documents"]
   websearch:
     type: "remote"
     url: "https://api.example.com/mcp"

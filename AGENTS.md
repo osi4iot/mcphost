@@ -27,7 +27,7 @@
 - Tool calling support across all providers with unified `llm.Tool` interface
 
 ## MCP Configuration Schema
-MCPHost supports a simplified configuration schema with two server types:
+MCPHost supports a simplified configuration schema with three server types:
 
 ### New Simplified Format
 - **Local servers** (`"type": "local"`): Run commands locally via stdio transport
@@ -36,6 +36,9 @@ MCPHost supports a simplified configuration schema with two server types:
 - **Remote servers** (`"type": "remote"`): Connect via StreamableHTTP transport
   - `url`: Server endpoint URL
   - Automatically uses StreamableHTTP for optimal performance
+- **Builtin servers** (`"type": "builtin"`): Run in-process for optimal performance
+  - `name`: Internal name of the builtin server (e.g., `"fs"`)
+  - `options`: Configuration options specific to the builtin server
 
 ### Legacy Format Support
 - Maintains full backward compatibility with existing configurations
@@ -45,6 +48,7 @@ MCPHost supports a simplified configuration schema with two server types:
 ### Transport Mapping
 - `"local"` type → `stdio` transport (launches local processes)
 - `"remote"` type → `streamable` transport (StreamableHTTP protocol)
+- `"builtin"` type → `inprocess` transport (in-process execution)
 - Legacy `transport` field still supported for backward compatibility
 
 ### Configuration Files

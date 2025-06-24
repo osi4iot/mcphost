@@ -14,14 +14,16 @@ type MCPServerConfig struct {
 	Command       []string          `json:"command,omitempty"`
 	Environment   map[string]string `json:"environment,omitempty"`
 	URL           string            `json:"url,omitempty"`
+	Name          string            `json:"name,omitempty"`    // For builtin servers
+	Options       map[string]any    `json:"options,omitempty"` // For builtin servers
 	AllowedTools  []string          `json:"allowedTools,omitempty"`
 	ExcludedTools []string          `json:"excludedTools,omitempty"`
-	
+
 	// Legacy fields for backward compatibility
-	Transport     string         `json:"transport,omitempty"`
-	Args          []string       `json:"args,omitempty"`
-	Env           map[string]any `json:"env,omitempty"`
-	Headers       []string       `json:"headers,omitempty"`
+	Transport string         `json:"transport,omitempty"`
+	Args      []string       `json:"args,omitempty"`
+	Env       map[string]any `json:"env,omitempty"`
+	Headers   []string       `json:"headers,omitempty"`
 }
 
 // UnmarshalJSON handles both new and legacy config formats
@@ -32,10 +34,12 @@ func (s *MCPServerConfig) UnmarshalJSON(data []byte) error {
 		Command       []string          `json:"command,omitempty"`
 		Environment   map[string]string `json:"environment,omitempty"`
 		URL           string            `json:"url,omitempty"`
+		Name          string            `json:"name,omitempty"`
+		Options       map[string]any    `json:"options,omitempty"`
 		AllowedTools  []string          `json:"allowedTools,omitempty"`
 		ExcludedTools []string          `json:"excludedTools,omitempty"`
 	}
-	
+
 	// Also try legacy format
 	type legacyFormat struct {
 		Transport     string         `json:"transport,omitempty"`
@@ -47,7 +51,7 @@ func (s *MCPServerConfig) UnmarshalJSON(data []byte) error {
 		AllowedTools  []string       `json:"allowedTools,omitempty"`
 		ExcludedTools []string       `json:"excludedTools,omitempty"`
 	}
-	
+
 	// Try new format first
 	var newConfig newFormat
 	if err := json.Unmarshal(data, &newConfig); err == nil && newConfig.Type != "" {
@@ -55,17 +59,19 @@ func (s *MCPServerConfig) UnmarshalJSON(data []byte) error {
 		s.Command = newConfig.Command
 		s.Environment = newConfig.Environment
 		s.URL = newConfig.URL
+		s.Name = newConfig.Name
+		s.Options = newConfig.Options
 		s.AllowedTools = newConfig.AllowedTools
 		s.ExcludedTools = newConfig.ExcludedTools
 		return nil
 	}
-	
+
 	// Fall back to legacy format
 	var legacyConfig legacyFormat
 	if err := json.Unmarshal(data, &legacyConfig); err != nil {
 		return err
 	}
-	
+
 	// Convert legacy format to new format
 	s.Transport = legacyConfig.Transport
 	if legacyConfig.Command != "" {
@@ -77,7 +83,7 @@ func (s *MCPServerConfig) UnmarshalJSON(data []byte) error {
 	s.Headers = legacyConfig.Headers
 	s.AllowedTools = legacyConfig.AllowedTools
 	s.ExcludedTools = legacyConfig.ExcludedTools
-	
+
 	return nil
 }
 
@@ -110,11 +116,13 @@ func (s *MCPServerConfig) GetTransportType() string {
 			return "stdio"
 		case "remote":
 			return "streamable"
+		case "builtin":
+			return "inprocess"
 		default:
 			return s.Type
 		}
 	}
-	
+
 	// Legacy format support
 	if s.Transport != "" {
 		return s.Transport
@@ -147,8 +155,12 @@ func (c *Config) Validate() error {
 			if serverConfig.URL == "" {
 				return fmt.Errorf("server %s: url is required for %s transport", serverName, transport)
 			}
+		case "inprocess":
+			if serverConfig.Name == "" {
+				return fmt.Errorf("server %s: name is required for builtin servers", serverName)
+			}
 		default:
-			return fmt.Errorf("server %s: unsupported transport type '%s'. Supported types: stdio, sse, streamable", serverName, transport)
+			return fmt.Errorf("server %s: unsupported transport type '%s'. Supported types: stdio, sse, streamable, inprocess", serverName, transport)
 		}
 	}
 	return nil
@@ -227,6 +239,16 @@ func createDefaultConfig(homeDir string) error {
 #   sqlite:
 #     type: "local"
 #     command: ["uvx", "mcp-server-sqlite", "--db-path", "/tmp/example.db"]
+#   
+#   # Builtin servers - run in-process for optimal performance
+#   filesystem-builtin:
+#     type: "builtin"
+#     name: "fs"
+#     options:
+#       allowed_directories: ["/tmp", "/home/user/documents"]
+#   filesystem-cwd:
+#     type: "builtin"
+#     name: "fs"  # Defaults to current working directory if no options specified
 #   
 #   # Remote servers - connect via StreamableHTTP
 #   websearch:

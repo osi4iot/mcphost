@@ -14,6 +14,7 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcphost/internal/builtin"
 	"github.com/mark3labs/mcphost/internal/config"
 )
 
@@ -221,7 +222,7 @@ func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string,
 		var env []string
 		var command string
 		var args []string
-		
+
 		// Handle command and environment
 		if len(serverConfig.Command) > 0 {
 			command = serverConfig.Command[0]
@@ -229,14 +230,14 @@ func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string,
 				args = serverConfig.Command[1:]
 			}
 		}
-		
+
 		// Convert environment variables
 		if serverConfig.Environment != nil {
 			for k, v := range serverConfig.Environment {
 				env = append(env, fmt.Sprintf("%s=%s", k, v))
 			}
 		}
-		
+
 		// Legacy environment support
 		if serverConfig.Env != nil {
 			for k, v := range serverConfig.Env {
@@ -303,6 +304,10 @@ func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string,
 
 		return streamableClient, nil
 
+	case "inprocess":
+		// Builtin server
+		return m.createBuiltinClient(ctx, serverName, serverConfig)
+
 	default:
 		return nil, fmt.Errorf("unsupported transport type '%s' for server %s", transportType, serverName)
 	}
@@ -325,4 +330,23 @@ func (m *MCPToolManager) initializeClient(ctx context.Context, client client.MCP
 		return fmt.Errorf("initialization timeout or failed: %v", err)
 	}
 	return nil
+}
+
+// createBuiltinClient creates an in-process MCP client for builtin servers
+func (m *MCPToolManager) createBuiltinClient(ctx context.Context, serverName string, serverConfig config.MCPServerConfig) (client.MCPClient, error) {
+	registry := builtin.NewRegistry()
+
+	// Create the builtin server
+	builtinServer, err := registry.CreateServer(serverConfig.Name, serverConfig.Options)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create builtin server: %v", err)
+	}
+
+	// Create an in-process client that wraps the builtin server
+	inProcessClient, err := client.NewInProcessClient(builtinServer.GetServer())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create in-process client: %v", err)
+	}
+
+	return inProcessClient, nil
 }
