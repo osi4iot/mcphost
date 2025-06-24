@@ -2,6 +2,9 @@ package config
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -194,5 +197,106 @@ func TestConfig_Validate(t *testing.T) {
 	err := config.Validate()
 	if err != nil {
 		t.Errorf("Validation failed: %v", err)
+	}
+}
+
+func TestEnsureConfigExists(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "mcphost_config_test")
+	if err != nil {
+		t.Fatalf("Error creating temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Set HOME to temp directory
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", oldHome)
+
+	// Test config creation
+	err = EnsureConfigExists()
+	if err != nil {
+		t.Fatalf("Error creating config: %v", err)
+	}
+
+	// Verify the config file was created
+	configPath := filepath.Join(tempDir, ".mcphost.yml")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		t.Fatalf("Config file was not created at %s", configPath)
+	}
+
+	// Read and verify the content
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("Error reading config: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// Verify it contains the expected sections
+	expectedSections := []string{
+		"# MCPHost Configuration File",
+		"mcpServers:",
+		"# Local MCP servers",
+		"# Builtin MCP servers",
+		"# Remote MCP servers",
+		"filesystem-builtin:",
+		"bash:",
+		"todo:",
+		"fetch:",
+		"type: \"builtin\"",
+		"type: \"local\"",
+		"type: \"remote\"",
+		"# Application settings",
+		"# Model generation parameters",
+	}
+
+	for _, expected := range expectedSections {
+		if !strings.Contains(contentStr, expected) {
+			t.Errorf("Config content missing expected section: %s", expected)
+		}
+	}
+
+	// Verify it's valid YAML structure (basic check)
+	if !strings.Contains(contentStr, "mcpServers:") {
+		t.Error("Config should contain mcpServers section")
+	}
+}
+
+func TestEnsureConfigExistsWhenFileExists(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "mcphost_config_test")
+	if err != nil {
+		t.Fatalf("Error creating temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Set HOME to temp directory
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", oldHome)
+
+	// Create an existing config file
+	configPath := filepath.Join(tempDir, ".mcphost.yml")
+	existingContent := "# Existing config\nmcpServers:\n  test: {}\n"
+	err = os.WriteFile(configPath, []byte(existingContent), 0644)
+	if err != nil {
+		t.Fatalf("Error creating existing config: %v", err)
+	}
+
+	// Test that EnsureConfigExists doesn't overwrite
+	err = EnsureConfigExists()
+	if err != nil {
+		t.Fatalf("Error in EnsureConfigExists: %v", err)
+	}
+
+	// Verify the content wasn't changed
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("Error reading config: %v", err)
+	}
+
+	if string(content) != existingContent {
+		t.Error("Existing config file was modified when it shouldn't have been")
 	}
 }

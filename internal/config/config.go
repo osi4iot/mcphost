@@ -222,38 +222,65 @@ func createDefaultConfig(homeDir string) error {
 	}
 	defer file.Close()
 
-	// Write a clean YAML template
+	// Write a comprehensive YAML template with examples
 	content := `# MCPHost Configuration File
 # All command-line flags can be configured here
+# This demonstrates the simplified local/remote/builtin server configuration
 
 # MCP Servers configuration
 # Add your MCP servers here
 # Examples for different server types:
 # mcpServers:
-#   # Local servers - run commands locally
-#   filesystem:
+#   # Local MCP servers - run commands locally via stdio transport
+#   filesystem-local:
 #     type: "local"
-#     command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/files"]
+#     command: ["npx", "@modelcontextprotocol/server-filesystem", "/tmp"]
 #     environment:
-#       MY_ENV_VAR: "my_env_var_value"
-#   sqlite:
-#     type: "local"
-#     command: ["uvx", "mcp-server-sqlite", "--db-path", "/tmp/example.db"]
+#       DEBUG: "true"
+#       LOG_LEVEL: "info"
 #   
-#   # Builtin servers - run in-process for optimal performance
+#   sqlite:
+#     type: "local" 
+#     command: ["uvx", "mcp-server-sqlite", "--db-path", "/tmp/example.db"]
+#     environment:
+#       SQLITE_DEBUG: "1"
+#   
+#   # Builtin MCP servers - run in-process for optimal performance
 #   filesystem-builtin:
 #     type: "builtin"
 #     name: "fs"
 #     options:
 #       allowed_directories: ["/tmp", "/home/user/documents"]
+#     allowedTools: ["read_file", "write_file", "list_directory"]
+#   
+#   # Minimal builtin server - defaults to current working directory
 #   filesystem-cwd:
 #     type: "builtin"
-#     name: "fs"  # Defaults to current working directory if no options specified
+#     name: "fs"
 #   
-#   # Remote servers - connect via StreamableHTTP
+#   # Bash server for shell commands
+#   bash:
+#     type: "builtin"
+#     name: "bash"
+#   
+#   # Todo server for task management
+#   todo:
+#     type: "builtin"
+#     name: "todo"
+#   
+#   # Fetch server for web content
+#   fetch:
+#     type: "builtin"
+#     name: "fetch"
+#   
+#   # Remote MCP servers - connect via StreamableHTTP transport
 #   websearch:
 #     type: "remote"
 #     url: "https://api.example.com/mcp"
+#   
+#   weather:
+#     type: "remote"
+#     url: "https://weather-mcp.example.com"
 #   
 #   # Legacy format still supported for backward compatibility:
 #   # legacy-server:
@@ -266,7 +293,7 @@ mcpServers:
 
 # Application settings (all optional)
 # model: "anthropic:claude-sonnet-4-20250514"  # Default model to use
-# max-steps: 20                                # Maximum agent steps (0 for unlimited)
+# max-steps: 10                                # Maximum agent steps (0 for unlimited)
 # debug: false                                 # Enable debug logging
 # system-prompt: "/path/to/system-prompt.txt" # System prompt text file
 
