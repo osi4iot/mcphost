@@ -54,7 +54,7 @@ func TestExecuteBash(t *testing.T) {
 	// Create a simple test request
 	request := mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
-			Name: "bash",
+			Name: "run_shell_cmd",
 			Arguments: map[string]any{
 				"command":     "echo 'Hello, World!'",
 				"description": "Test echo command",
@@ -91,7 +91,7 @@ func TestBashCommandValidation(t *testing.T) {
 	// Test banned command
 	request := mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
-			Name: "bash",
+			Name: "run_shell_cmd",
 			Arguments: map[string]any{
 				"command":     "curl http://example.com",
 				"description": "Test banned command",
@@ -120,5 +120,34 @@ func TestBashCommandValidation(t *testing.T) {
 		if textContent.Text == "" {
 			t.Error("Expected non-empty error message")
 		}
+	}
+}
+
+func TestToolNameChange(t *testing.T) {
+	// Test that the tool can be called with the new name "run_shell_cmd"
+	request := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "run_shell_cmd", // This should be the new name
+			Arguments: map[string]any{
+				"command":     "echo 'test'",
+				"description": "Test renamed tool",
+			},
+		},
+	}
+
+	ctx := context.Background()
+	result, err := executeBash(ctx, request)
+
+	if err != nil {
+		t.Fatalf("Failed to execute renamed tool: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Expected result to be non-nil")
+	}
+
+	// Verify the tool executed successfully
+	if len(result.Content) == 0 {
+		t.Fatal("Expected result to have content")
 	}
 }

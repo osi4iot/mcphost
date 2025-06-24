@@ -41,8 +41,8 @@ var bannedCommands = []string{
 func NewBashServer() (*server.MCPServer, error) {
 	s := server.NewMCPServer("bash-server", "1.0.0", server.WithToolCapabilities(true))
 
-	// Register the bash tool using the builder pattern
-	bashTool := mcp.NewTool("bash",
+	// Register the run_shell_cmd tool using the builder pattern
+	bashTool := mcp.NewTool("run_shell_cmd",
 		mcp.WithDescription(bashDescription),
 		mcp.WithString("command",
 			mcp.Required(),

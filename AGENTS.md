@@ -3,7 +3,7 @@
 ## Build/Test Commands
 - **Build**: `go build -o output/mcphost` or use `./contribute/build.sh`
 - **Test**: `go test ./...` (run all tests)
-- **Test single package**: `go test ./pkg/llm/anthropic`
+- **Test single package**: `go test ./cmd` (test script functionality)
 - **Lint**: `go vet ./...` (built-in Go linter)
 - **Format**: `go fmt ./...`
 - **Dependencies**: `go mod tidy`
@@ -81,3 +81,31 @@ MCPHost includes several builtin MCP servers for common functionality:
 - **Purpose**: Fetch web content and convert to text, markdown, or HTML formats
 - **Features**: HTTP/HTTPS support, HTML parsing, markdown conversion, size limits
 - **Security**: 5MB response limit, configurable timeouts, localhost-aware HTTPS upgrade
+
+## Script System
+MCPHost includes a powerful script system for automation and reusable workflows.
+
+### Script Features
+- **Location**: `cmd/script.go` (main implementation), `cmd/script_test.go` (comprehensive tests)
+- **Purpose**: Execute YAML-based automation scripts with variable substitution
+- **Format**: YAML frontmatter + prompt content in single executable files
+
+### Variable Substitution System
+- **Required Variables**: `${variable}` - Must be provided via `--args:variable value`
+- **Optional Variables**: `${variable:-default}` - Uses default if not provided
+- **Features**: 
+  - Bash-style default syntax for familiarity
+  - Empty defaults supported: `${var:-}`
+  - Complex defaults: paths, URLs, commands with spaces
+  - Full backward compatibility with existing scripts
+- **Implementation**: Regex-based parsing with comprehensive validation
+
+### Script Examples
+- **Location**: `examples/scripts/` directory
+- **Demo Script**: `default-values-demo.sh` - Showcases new default values feature
+- **Usage Examples**: Multiple scenarios from simple defaults to complex overrides
+
+### Testing
+- **Test Coverage**: 25+ test cases covering all variable scenarios
+- **Edge Cases**: Empty defaults, complex values, mixed required/optional variables
+- **Backward Compatibility**: Ensures existing scripts continue working unchanged

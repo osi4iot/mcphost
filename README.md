@@ -364,7 +364,7 @@ mcphost script myscript.sh --args:directory /tmp --args:name "John"
 Scripts combine YAML configuration with prompts in a single executable file. The configuration must be wrapped in frontmatter delimiters (`---`). You can either include the prompt in the YAML configuration or place it after the closing frontmatter delimiter:
 
 ```yaml
-#!/usr/local/bin/mcphost script
+#!/usr/bin/env -S mcphost script
 ---
 # This script uses the container-use MCP server from https://github.com/dagger/container-use
 mcpServers:
@@ -380,7 +380,7 @@ prompt: |
 Or alternatively, omit the `prompt:` field and place the prompt after the frontmatter:
 
 ```yaml
-#!/usr/local/bin/mcphost script
+#!/usr/bin/env -S mcphost script
 ---
 # This script uses the container-use MCP server from https://github.com/dagger/container-use
 mcpServers:
@@ -394,38 +394,71 @@ Each in their own environment. Give me the URL of each app
 
 #### Variable Substitution
 
-Scripts support variable substitution using `${variable}` syntax. Variables must be provided via command line arguments:
+Scripts support variable substitution using `${variable}` syntax with optional default values. Variables can be provided via command line arguments:
 
 ```bash
 # Script with variables
 mcphost script myscript.sh --args:directory /tmp --args:name "John"
 ```
 
-Example script with variables:
+##### Variable Syntax
+
+MCPHost supports two variable syntaxes:
+
+1. **Required Variables**: `${variable}` - Must be provided via `--args:variable value`
+2. **Optional Variables with Defaults**: `${variable:-default}` - Uses default if not provided
+
+Example script with mixed variables:
 ```yaml
-#!/usr/local/bin/mcphost script
+#!/usr/bin/env -S mcphost script
 ---
 mcpServers:
   filesystem:
     type: "local"
-    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "${directory}"]
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "${directory:-/tmp}"]
 ---
-Hello ${name}! Please list the files in ${directory} and tell me about them.
+Hello ${name:-World}! Please list the files in ${directory:-/tmp} and tell me about them.
+Use the ${command:-ls} command to show file details.
 ```
 
-**Important**: All declared variables (e.g., `${directory}`, `${name}`) must be provided using `--args:variable value` syntax, or the script will exit with an error listing the missing variables.
+##### Usage Examples
+
+```bash
+# Uses all defaults: name="World", directory="/tmp", command="ls"
+mcphost script myscript.sh
+
+# Override specific variables
+mcphost script myscript.sh --args:name "John"
+
+# Override multiple variables  
+mcphost script myscript.sh --args:name "John" --args:directory "/home/john"
+
+# Mix of provided and default values
+mcphost script myscript.sh --args:name "Alice" --args:command "ls -la"
+```
+
+##### Default Value Features
+
+- **Empty defaults**: `${var:-}` - Uses empty string if not provided
+- **Complex defaults**: `${path:-/tmp/default/path}` - Supports paths, URLs, etc.
+- **Spaces in defaults**: `${msg:-Hello World}` - Supports spaces in default values
+- **Backward compatibility**: Existing `${variable}` syntax continues to work unchanged
+
+**Important**: Only variables without defaults (e.g., `${directory}`, `${name}`) are required. Variables with defaults are optional and will use their default value if not provided via `--args:variable value` syntax.
 
 #### Script Features
 
-- **Executable**: Use shebang line for direct execution
+- **Executable**: Use shebang line for direct execution (`#!/usr/bin/env -S mcphost script`)
 - **YAML Configuration**: Define MCP servers directly in the script
 - **Embedded Prompts**: Include the prompt in the YAML
-- **Variable Substitution**: Use `${variable}` syntax with `--args:variable value`
-- **Variable Validation**: Missing variables cause script to exit with helpful error
+- **Variable Substitution**: Use `${variable}` and `${variable:-default}` syntax with `--args:variable value`
+- **Variable Validation**: Missing required variables cause script to exit with helpful error
 - **Interactive Mode**: If prompt is empty, drops into interactive mode (handy for setup scripts)
 - **Config Fallback**: If no `mcpServers` defined, uses default config
 - **Tool Filtering**: Supports `allowedTools`/`excludedTools` per server
 - **Clean Exit**: Automatically exits after completion
+
+**Note**: The shebang line requires `env -S` to handle the multi-word command `mcphost script`. This is supported on most modern Unix-like systems.
 
 #### Script Examples
 

@@ -30,23 +30,25 @@ Example script file:
 ---
 model: "anthropic:claude-sonnet-4-20250514"
 max-steps: 10
-mcp-servers:
+mcpServers:
   filesystem:
-    command: "npx"
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    type: "local"
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "${directory:-/tmp}"]
 ---
-List the files in ${directory} and tell me about them.
+Hello ${name:-World}! List the files in ${directory:-/tmp} and tell me about them.
 
 The script command supports the same flags as the main command,
 which will override any settings in the script file.
 
 Variable substitution:
 Variables in the script can be substituted using ${variable} syntax.
+Variables can have default values using ${variable:-default} syntax.
 Pass variables using --args:variable value syntax:
 
   mcphost script myscript.sh --args:directory /tmp --args:name "John"
 
-This will replace ${directory} with "/tmp" and ${name} with "John" in the script.`,
+This will replace ${directory} with "/tmp" and ${name} with "John" in the script.
+Variables with defaults (${var:-default}) are optional and use the default if not provided.`,
 	Args: cobra.ExactArgs(1),
 	FParseErrWhitelist: cobra.FParseErrWhitelist{
 		UnknownFlags: true, // Allow unknown flags for variable substitution
@@ -352,20 +354,55 @@ func parseScriptContent(content string, variables map[string]string) (*config.Co
 	return &scriptConfig, nil
 }
 
+// Variable represents a script variable with optional default value
+type Variable struct {
+	Name         string
+	DefaultValue string
+	HasDefault   bool
+}
+
 // findVariables extracts all unique variable names from ${variable} patterns in content
+// Maintains backward compatibility by returning just variable names
 func findVariables(content string) []string {
-	re := regexp.MustCompile(`\$\{([^}]+)\}`)
+	variables := findVariablesWithDefaults(content)
+	var names []string
+	for _, v := range variables {
+		names = append(names, v.Name)
+	}
+	return names
+}
+
+// findVariablesWithDefaults extracts all unique variables with their default values
+// Supports both ${variable} and ${variable:-default} syntax
+func findVariablesWithDefaults(content string) []Variable {
+	// Pattern matches:
+	// ${varname} - simple variable
+	// ${varname:-default} - variable with default value
+	re := regexp.MustCompile(`\$\{([^}:]+)(?::-([^}]*))?\}`)
 	matches := re.FindAllStringSubmatch(content, -1)
 
 	seenVars := make(map[string]bool)
-	var variables []string
+	var variables []Variable
 
 	for _, match := range matches {
-		if len(match) > 1 {
+		if len(match) >= 2 {
 			varName := match[1]
 			if !seenVars[varName] {
 				seenVars[varName] = true
-				variables = append(variables, varName)
+				
+				// Check if the original match contains the :- pattern
+				hasDefault := strings.Contains(match[0], ":-")
+				
+				variable := Variable{
+					Name:       varName,
+					HasDefault: hasDefault,
+				}
+				
+				if hasDefault && len(match) >= 3 {
+					variable.DefaultValue = match[2] // Can be empty string
+				}
+				
+				variables = append(variables, variable)
 			}
 		}
 	}
@@ -374,13 +411,14 @@ func findVariables(content string) []string {
 }
 
 // validateVariables checks that all declared variables in the content are provided
+// Variables with default values are not required
 func validateVariables(content string, variables map[string]string) error {
-	declaredVars := findVariables(content)
+	declaredVars := findVariablesWithDefaults(content)
 
 	var missingVars []string
-	for _, varName := range declaredVars {
-		if _, exists := variables[varName]; !exists {
-			missingVars = append(missingVars, varName)
+	for _, variable := range declaredVars {
+		if _, exists := variables[variable.Name]; !exists && !variable.HasDefault {
+			missingVars = append(missingVars, variable.Name)
 		}
 	}
 
@@ -391,20 +429,37 @@ func validateVariables(content string, variables map[string]string) error {
 	return nil
 }
 
-// substituteVariables replaces ${variable} patterns with their values
+// substituteVariables replaces ${variable} and ${variable:-default} patterns with their values
 func substituteVariables(content string, variables map[string]string) string {
-	re := regexp.MustCompile(`\$\{([^}]+)\}`)
+	// Pattern matches both ${varname} and ${varname:-default}
+	re := regexp.MustCompile(`\$\{([^}:]+)(?::-([^}]*))?\}`)
 
 	return re.ReplaceAllStringFunc(content, func(match string) string {
-		// Extract variable name (remove ${ and })
-		varName := match[2 : len(match)-1]
+		// Parse the match to extract variable name and default value
+		submatches := re.FindStringSubmatch(match)
+		if len(submatches) < 2 {
+			return match // Should not happen, but safety check
+		}
+
+		varName := submatches[1]
+		// Check if the original match contains the :- pattern
+		hasDefault := strings.Contains(match, ":-")
+		defaultValue := ""
+		if hasDefault && len(submatches) >= 3 {
+			defaultValue = submatches[2] // Can be empty string
+		}
 
 		// Look up the variable value
 		if value, exists := variables[varName]; exists {
 			return value
 		}
 
-		// If variable not found, leave it as is
+		// Use default value if available
+		if hasDefault {
+			return defaultValue
+		}
+
+		// If no value and no default, leave it as is
 		return match
 	})
 }

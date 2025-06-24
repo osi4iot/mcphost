@@ -1,4 +1,4 @@
-#!/usr/local/bin/mcphost --script
+#!/usr/bin/env -S mcphost script
 # This script uses the container-use MCP server from https://github.com/dagger/container-use
 mcpServers:
   container-use:
