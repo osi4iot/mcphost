@@ -55,3 +55,29 @@ MCPHost supports a simplified configuration schema with three server types:
 - Primary: `~/.mcphost.yml` or `~/.mcphost.json`
 - Legacy: `~/.mcp.yml` or `~/.mcp.json`
 - Custom location via `--config` flag
+
+## Available Builtin Servers
+MCPHost includes several builtin MCP servers for common functionality:
+
+### Filesystem Server (`fs`)
+- **Location**: `internal/builtin/registry.go` (registration), uses external `mcp-filesystem-server`
+- **Purpose**: Secure filesystem access with configurable allowed directories
+- **Options**: `allowed_directories` array (defaults to current working directory)
+
+### Bash Server (`bash`)
+- **Location**: `internal/builtin/bash.go`
+- **Purpose**: Execute bash commands with security restrictions and timeout controls
+- **Features**: Banned commands list, configurable timeouts, output size limits
+- **Security**: Blocks network commands (curl, wget, etc.), 30KB output limit, 2-10 minute timeouts
+
+### Todo Server (`todo`)
+- **Location**: `internal/builtin/todo.go`
+- **Purpose**: Manage ephemeral todo lists for task tracking during sessions
+- **Features**: In-memory storage, thread-safe operations, JSON-based API
+- **Tools**: `todowrite` (create/update todos), `todoread` (read current todos)
+
+### Fetch Server (`fetch`)
+- **Location**: `internal/builtin/fetch.go`
+- **Purpose**: Fetch web content and convert to text, markdown, or HTML formats
+- **Features**: HTTP/HTTPS support, HTML parsing, markdown conversion, size limits
+- **Security**: 5MB response limit, configurable timeouts, localhost-aware HTTPS upgrade

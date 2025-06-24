@@ -38,6 +38,8 @@ func NewRegistry() *Registry {
 	// Register builtin servers
 	r.registerFilesystemServer()
 	r.registerBashServer()
+	r.registerTodoServer()
+	r.registerFetchServer()
 
 	return r
 }
@@ -110,6 +112,32 @@ func (r *Registry) registerBashServer() {
 		server, err := NewBashServer()
 		if err != nil {
 			return nil, fmt.Errorf("failed to create bash server: %v", err)
+		}
+
+		return &BuiltinServerWrapper{server: server}, nil
+	}
+}
+
+// registerTodoServer registers the todo server
+func (r *Registry) registerTodoServer() {
+	r.servers["todo"] = func(options map[string]any) (*BuiltinServerWrapper, error) {
+		// Create the todo server
+		server, err := NewTodoServer()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create todo server: %v", err)
+		}
+
+		return &BuiltinServerWrapper{server: server}, nil
+	}
+}
+
+// registerFetchServer registers the fetch server
+func (r *Registry) registerFetchServer() {
+	r.servers["fetch"] = func(options map[string]any) (*BuiltinServerWrapper, error) {
+		// Create the fetch server
+		server, err := NewFetchServer()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create fetch server: %v", err)
 		}
 
 		return &BuiltinServerWrapper{server: server}, nil

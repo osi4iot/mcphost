@@ -183,6 +183,40 @@ Each builtin server entry requires:
 **Available Builtin Servers:**
 - `fs` (filesystem): Secure filesystem access with configurable allowed directories
   - `allowed_directories`: Array of directory paths that the server can access (defaults to current working directory if not specified)
+- `bash`: Execute bash commands with security restrictions and timeout controls
+  - No configuration options required
+- `todo`: Manage ephemeral todo lists for task tracking during sessions
+  - No configuration options required (todos are stored in memory and reset on restart)
+- `fetch`: Fetch web content and convert to text, markdown, or HTML formats
+  - No configuration options required
+
+#### Builtin Server Examples
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "type": "builtin",
+      "name": "fs",
+      "options": {
+        "allowed_directories": ["/tmp", "/home/user/documents"]
+      }
+    },
+    "bash-commands": {
+      "type": "builtin", 
+      "name": "bash"
+    },
+    "task-manager": {
+      "type": "builtin",
+      "name": "todo"
+    },
+    "web-fetcher": {
+      "type": "builtin",
+      "name": "fetch"
+    }
+  }
+}
+```
 
 ### Tool Filtering
 
