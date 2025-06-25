@@ -228,6 +228,10 @@ func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string,
 			command = serverConfig.Command[0]
 			if len(serverConfig.Command) > 1 {
 				args = serverConfig.Command[1:]
+			} else if len(serverConfig.Args) > 0 {
+				// Legacy fallback: Command only has the command, Args has the arguments
+				// This handles cases where legacy config conversion didn't work properly
+				args = serverConfig.Args
 			}
 		}
 
@@ -245,6 +249,8 @@ func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string,
 			}
 		}
 
+
+		
 		stdioClient, err := client.NewStdioMCPClient(command, env, args...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create stdio client: %v", err)
@@ -260,7 +266,25 @@ func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string,
 
 	case "sse":
 		// SSE client
-		sseClient, err := client.NewSSEMCPClient(serverConfig.URL)
+		var options []transport.ClientOption
+
+		// Add headers if specified
+		if len(serverConfig.Headers) > 0 {
+			headers := make(map[string]string)
+			for _, header := range serverConfig.Headers {
+				parts := strings.SplitN(header, ":", 2)
+				if len(parts) == 2 {
+					key := strings.TrimSpace(parts[0])
+					value := strings.TrimSpace(parts[1])
+					headers[key] = value
+				}
+			}
+			if len(headers) > 0 {
+				options = append(options, transport.WithHeaders(headers))
+			}
+		}
+
+		sseClient, err := client.NewSSEMCPClient(serverConfig.URL, options...)
 		if err != nil {
 			return nil, err
 		}
@@ -315,7 +339,7 @@ func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string,
 
 func (m *MCPToolManager) initializeClient(ctx context.Context, client client.MCPClient) error {
 	// Create a timeout context for initialization to prevent deadlocks
-	initCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	initCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	initRequest := mcp.InitializeRequest{}
@@ -324,6 +348,7 @@ func (m *MCPToolManager) initializeClient(ctx context.Context, client client.MCP
 		Name:    "mcphost",
 		Version: "1.0.0",
 	}
+	initRequest.Params.Capabilities = mcp.ClientCapabilities{}
 
 	_, err := client.Initialize(initCtx, initRequest)
 	if err != nil {

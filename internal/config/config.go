@@ -34,6 +34,7 @@ func (s *MCPServerConfig) UnmarshalJSON(data []byte) error {
 		Command       []string          `json:"command,omitempty"`
 		Environment   map[string]string `json:"environment,omitempty"`
 		URL           string            `json:"url,omitempty"`
+		Headers       []string          `json:"headers,omitempty"`
 		Name          string            `json:"name,omitempty"`
 		Options       map[string]any    `json:"options,omitempty"`
 		AllowedTools  []string          `json:"allowedTools,omitempty"`
@@ -59,6 +60,7 @@ func (s *MCPServerConfig) UnmarshalJSON(data []byte) error {
 		s.Command = newConfig.Command
 		s.Environment = newConfig.Environment
 		s.URL = newConfig.URL
+		s.Headers = newConfig.Headers
 		s.Name = newConfig.Name
 		s.Options = newConfig.Options
 		s.AllowedTools = newConfig.AllowedTools
@@ -283,6 +285,7 @@ func createDefaultConfig(homeDir string) error {
 #     name: "fetch"
 #   
 #   # Remote MCP servers - connect via StreamableHTTP transport
+#   # Optional 'headers' field can be used for authentication and custom headers
 #   websearch:
 #     type: "remote"
 #     url: "https://api.example.com/mcp"

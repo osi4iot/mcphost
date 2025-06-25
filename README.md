@@ -138,7 +138,8 @@ For remote MCP servers accessible via HTTP:
   "mcpServers": {
     "websearch": {
       "type": "remote",
-      "url": "https://api.example.com/mcp"
+      "url": "https://api.example.com/mcp",
+      "headers": ["Authorization: Bearer your-api-token"]
     },
     "weather": {
       "type": "remote", 
@@ -151,6 +152,7 @@ For remote MCP servers accessible via HTTP:
 Each remote server entry requires:
 - `type`: Must be set to `"remote"`
 - `url`: The URL where the MCP server is accessible
+- `headers`: (Optional) Array of HTTP headers for authentication and custom headers
 
 Remote servers automatically use the StreamableHTTP transport for optimal performance.
 
@@ -246,7 +248,7 @@ All MCP server types support tool filtering to restrict which tools are availabl
 
 ### Legacy Configuration Support
 
-MCPHost maintains full backward compatibility with the previous configuration format:
+MCPHost maintains full backward compatibility with the previous configuration format. **Note**: A recent bug fix improved legacy stdio transport reliability for external MCP servers (Docker, NPX, etc.).
 
 #### Legacy STDIO Format
 ```json
@@ -270,6 +272,24 @@ MCPHost maintains full backward compatibility with the previous configuration fo
     "server_name": {
       "url": "http://some_host:8000/sse",
       "headers": ["Authorization: Bearer my-token"]
+    }
+  }
+}
+```
+
+#### Legacy Docker/Container Format
+```json
+{
+  "mcpServers": {
+    "phalcon": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "ghcr.io/mark3labs/phalcon-mcp:latest",
+        "serve"
+      ]
     }
   }
 }

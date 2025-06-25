@@ -44,6 +44,7 @@ MCPHost supports a simplified configuration schema with three server types:
 - Maintains full backward compatibility with existing configurations
 - Automatic detection and conversion of legacy formats
 - Custom `UnmarshalJSON` method handles format migration seamlessly
+- **Bug Fix**: Improved stdio transport reliability for legacy configurations with external processes (Docker, NPX, etc.)
 
 ### Transport Mapping
 - `"local"` type → `stdio` transport (launches local processes)
@@ -109,3 +110,20 @@ MCPHost includes a powerful script system for automation and reusable workflows.
 - **Test Coverage**: 25+ test cases covering all variable scenarios
 - **Edge Cases**: Empty defaults, complex values, mixed required/optional variables
 - **Backward Compatibility**: Ensures existing scripts continue working unchanged
+
+## Recent Bug Fixes
+
+### Legacy MCP Server Configuration Fix
+- **Issue**: Legacy stdio transport configurations (using `command` + `args` format) were failing with timeout errors
+- **Root Cause**: MCP client creation was not properly handling legacy argument parsing when `Command` array was incomplete
+- **Fix**: Added fallback logic in `internal/tools/mcp.go` to use legacy `Args` field when `Command` array only contains the command
+- **Impact**: Fixes Docker-based MCP servers, NPX-based servers, and other external process configurations
+- **Files Modified**: 
+  - `internal/tools/mcp.go`: Added legacy args fallback logic
+  - `internal/config/config.go`: Enhanced headers support for remote servers
+- **Testing**: Verified with both Docker (`ghcr.io/mark3labs/phalcon-mcp:latest`) and NPX (`@modelcontextprotocol/server-filesystem`) servers
+
+### MCP Client Initialization Improvements
+- **Timeout**: Increased initialization timeout from 10s to 30s for slower external processes
+- **Capabilities**: Added explicit `ClientCapabilities{}` to initialization request for better compatibility
+- **Headers**: Enhanced SSE transport to support custom headers for authentication

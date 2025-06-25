@@ -401,6 +401,161 @@ func TestIssue76_ExactReproduction(t *testing.T) {
 	}
 }
 
+func TestMCPServerConfig_RemoteFormatWithHeaders(t *testing.T) {
+	tests := []struct {
+		name              string
+		jsonData          string
+		expectedType      string
+		expectedURL       string
+		expectedHeaders   []string
+		expectedTransport string
+	}{
+		{
+			name: "Remote server with headers",
+			jsonData: `{
+				"type": "remote",
+				"url": "https://api.example.com/mcp",
+				"headers": ["Authorization: Bearer token123", "X-API-Key: key456"]
+			}`,
+			expectedType:      "remote",
+			expectedURL:       "https://api.example.com/mcp",
+			expectedHeaders:   []string{"Authorization: Bearer token123", "X-API-Key: key456"},
+			expectedTransport: "streamable",
+		},
+		{
+			name: "Remote server without headers",
+			jsonData: `{
+				"type": "remote",
+				"url": "https://api.example.com/mcp"
+			}`,
+			expectedType:      "remote",
+			expectedURL:       "https://api.example.com/mcp",
+			expectedHeaders:   nil,
+			expectedTransport: "streamable",
+		},
+		{
+			name: "Legacy remote server with headers",
+			jsonData: `{
+				"url": "https://legacy.example.com/mcp",
+				"headers": ["Content-Type: application/json", "User-Agent: MCPHost/1.0"]
+			}`,
+			expectedType:      "",
+			expectedURL:       "https://legacy.example.com/mcp",
+			expectedHeaders:   []string{"Content-Type: application/json", "User-Agent: MCPHost/1.0"},
+			expectedTransport: "sse",
+		},
+		{
+			name: "Legacy remote server with explicit transport and headers",
+			jsonData: `{
+				"url": "https://legacy.example.com/mcp",
+				"transport": "sse",
+				"headers": ["Authorization: Basic dXNlcjpwYXNz"]
+			}`,
+			expectedType:      "",
+			expectedURL:       "https://legacy.example.com/mcp",
+			expectedHeaders:   []string{"Authorization: Basic dXNlcjpwYXNz"},
+			expectedTransport: "sse",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config MCPServerConfig
+			err := json.Unmarshal([]byte(tt.jsonData), &config)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal: %v", err)
+			}
+
+			if config.Type != tt.expectedType {
+				t.Errorf("Expected type '%s', got '%s'", tt.expectedType, config.Type)
+			}
+
+			if config.URL != tt.expectedURL {
+				t.Errorf("Expected URL '%s', got '%s'", tt.expectedURL, config.URL)
+			}
+
+			if len(config.Headers) != len(tt.expectedHeaders) {
+				t.Errorf("Expected %d headers, got %d", len(tt.expectedHeaders), len(config.Headers))
+			}
+
+			for i, expectedHeader := range tt.expectedHeaders {
+				if i >= len(config.Headers) || config.Headers[i] != expectedHeader {
+					t.Errorf("Header %d: expected '%s', got '%s'", i, expectedHeader, config.Headers[i])
+				}
+			}
+
+			transportType := config.GetTransportType()
+			if transportType != tt.expectedTransport {
+				t.Errorf("Expected transport type '%s', got '%s'", tt.expectedTransport, transportType)
+			}
+		})
+	}
+}
+
+func TestMCPServerConfig_HeadersParsing(t *testing.T) {
+	// Test that headers are properly parsed in both new and legacy formats
+	tests := []struct {
+		name     string
+		jsonData string
+		expected []string
+	}{
+		{
+			name: "New format with multiple headers",
+			jsonData: `{
+				"type": "remote",
+				"url": "https://api.example.com",
+				"headers": [
+					"Authorization: Bearer abc123",
+					"Content-Type: application/json",
+					"X-Custom-Header: custom-value"
+				]
+			}`,
+			expected: []string{
+				"Authorization: Bearer abc123",
+				"Content-Type: application/json",
+				"X-Custom-Header: custom-value",
+			},
+		},
+		{
+			name: "Legacy format with headers",
+			jsonData: `{
+				"url": "https://legacy.example.com",
+				"headers": ["API-Key: secret123", "Accept: application/json"]
+			}`,
+			expected: []string{"API-Key: secret123", "Accept: application/json"},
+		},
+		{
+			name: "Empty headers array",
+			jsonData: `{
+				"type": "remote",
+				"url": "https://api.example.com",
+				"headers": []
+			}`,
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config MCPServerConfig
+			err := json.Unmarshal([]byte(tt.jsonData), &config)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal: %v", err)
+			}
+
+			if len(config.Headers) != len(tt.expected) {
+				t.Errorf("Expected %d headers, got %d", len(tt.expected), len(config.Headers))
+			}
+
+			for i, expected := range tt.expected {
+				if i >= len(config.Headers) || config.Headers[i] != expected {
+					t.Errorf("Header %d: expected '%s', got '%s'", i, expected, config.Headers[i])
+				}
+			}
+		})
+	}
+}
+
 func TestEnsureConfigExistsWhenFileExists(t *testing.T) {
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "mcphost_config_test")
