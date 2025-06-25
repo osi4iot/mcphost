@@ -84,6 +84,14 @@ func (s *MCPServerConfig) UnmarshalJSON(data []byte) error {
 	s.AllowedTools = legacyConfig.AllowedTools
 	s.ExcludedTools = legacyConfig.ExcludedTools
 
+	// Infer type from legacy format for better compatibility
+	// Only set Type when it doesn't change existing transport behavior
+	if legacyConfig.Command != "" {
+		s.Type = "local" // This maps to "stdio" which matches legacy behavior
+	}
+	// Don't set Type for URL-only configs to preserve legacy "sse" behavior
+	// The URL will be handled by the legacy fallback logic in GetTransportType()
+
 	return nil
 }
 
@@ -109,6 +117,11 @@ type Config struct {
 
 // GetTransportType returns the transport type for the server config
 func (s *MCPServerConfig) GetTransportType() string {
+	// Legacy format support - check explicit transport first
+	if s.Transport != "" {
+		return s.Transport
+	}
+
 	// New simplified format
 	if s.Type != "" {
 		switch s.Type {
@@ -123,10 +136,6 @@ func (s *MCPServerConfig) GetTransportType() string {
 		}
 	}
 
-	// Legacy format support
-	if s.Transport != "" {
-		return s.Transport
-	}
 	// Backward compatibility: infer transport type
 	if len(s.Command) > 0 {
 		return "stdio"

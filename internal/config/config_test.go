@@ -91,6 +91,11 @@ func TestMCPServerConfig_LegacyFormat(t *testing.T) {
 		t.Fatalf("Failed to unmarshal legacy format: %v", err)
 	}
 
+	// Verify Type field is now set correctly for legacy format
+	if config.Type != "local" {
+		t.Errorf("Expected type 'local' for legacy command format, got '%s'", config.Type)
+	}
+
 	if len(config.Command) != 3 {
 		t.Errorf("Expected 3 command parts, got %d", len(config.Command))
 	}
@@ -260,6 +265,139 @@ func TestEnsureConfigExists(t *testing.T) {
 	// Verify it's valid YAML structure (basic check)
 	if !strings.Contains(contentStr, "mcpServers:") {
 		t.Error("Config should contain mcpServers section")
+	}
+}
+
+func TestMCPServerConfig_LegacyFormatTypeInference(t *testing.T) {
+	tests := []struct {
+		name              string
+		jsonData          string
+		expectedType      string
+		expectedTransport string
+	}{
+		{
+			name: "Legacy command format should infer local type",
+			jsonData: `{
+				"command": "npx",
+				"args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+			}`,
+			expectedType:      "local",
+			expectedTransport: "stdio",
+		},
+		{
+			name: "Legacy URL format should preserve legacy behavior",
+			jsonData: `{
+				"url": "https://api.example.com/mcp"
+			}`,
+			expectedType:      "", // Don't set Type to preserve legacy transport behavior
+			expectedTransport: "sse",
+		},
+		{
+			name: "Legacy format with explicit transport should still infer type",
+			jsonData: `{
+				"command": "python",
+				"args": ["-m", "my_mcp_server"],
+				"transport": "stdio"
+			}`,
+			expectedType:      "local",
+			expectedTransport: "stdio",
+		},
+		{
+			name: "Legacy format with URL and explicit transport should preserve explicit transport",
+			jsonData: `{
+				"url": "https://remote-server.com",
+				"transport": "sse"
+			}`,
+			expectedType:      "", // Don't set Type to preserve legacy behavior
+			expectedTransport: "sse",
+		},
+		{
+			name: "Empty legacy format should not set type",
+			jsonData: `{
+				"env": {"VAR": "value"}
+			}`,
+			expectedType:      "",
+			expectedTransport: "stdio",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config MCPServerConfig
+			err := json.Unmarshal([]byte(tt.jsonData), &config)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal: %v", err)
+			}
+
+			if config.Type != tt.expectedType {
+				t.Errorf("Expected type '%s', got '%s'", tt.expectedType, config.Type)
+			}
+
+			transportType := config.GetTransportType()
+			if transportType != tt.expectedTransport {
+				t.Errorf("Expected transport type '%s', got '%s'", tt.expectedTransport, transportType)
+			}
+		})
+	}
+}
+
+func TestIssue76_ExactReproduction(t *testing.T) {
+	// Test the exact config from GitHub issue #76
+	jsonData := `{
+		"mcpServers": {
+			"filesystem": {
+				"command": "npx",
+				"args": [
+					"-y",
+					"@modelcontextprotocol/server-filesystem",
+					"C:\\test"
+				]
+			}
+		}
+	}`
+
+	var cfg Config
+	err := json.Unmarshal([]byte(jsonData), &cfg)
+	if err != nil {
+		t.Fatalf("Error unmarshaling config: %v", err)
+	}
+
+	// Verify the server config was parsed correctly
+	if len(cfg.MCPServers) != 1 {
+		t.Fatalf("Expected 1 server, got %d", len(cfg.MCPServers))
+	}
+
+	serverConfig, exists := cfg.MCPServers["filesystem"]
+	if !exists {
+		t.Fatal("Expected 'filesystem' server to exist")
+	}
+
+	// Verify Type field is now set correctly
+	if serverConfig.Type != "local" {
+		t.Errorf("Expected type 'local', got '%s'", serverConfig.Type)
+	}
+
+	// Verify command was parsed correctly
+	expectedCommand := []string{"npx", "-y", "@modelcontextprotocol/server-filesystem", "C:\\test"}
+	if len(serverConfig.Command) != len(expectedCommand) {
+		t.Errorf("Expected %d command parts, got %d", len(expectedCommand), len(serverConfig.Command))
+	}
+	for i, expected := range expectedCommand {
+		if i >= len(serverConfig.Command) || serverConfig.Command[i] != expected {
+			t.Errorf("Command part %d: expected '%s', got '%s'", i, expected, serverConfig.Command[i])
+		}
+	}
+
+	// Verify transport type detection works
+	transportType := serverConfig.GetTransportType()
+	if transportType != "stdio" {
+		t.Errorf("Expected transport type 'stdio', got '%s'", transportType)
+	}
+
+	// Most importantly, verify validation passes
+	err = cfg.Validate()
+	if err != nil {
+		t.Errorf("Validation should pass but failed with: %v", err)
 	}
 }
 

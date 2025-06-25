@@ -389,19 +389,19 @@ func findVariablesWithDefaults(content string) []Variable {
 			varName := match[1]
 			if !seenVars[varName] {
 				seenVars[varName] = true
-				
+
 				// Check if the original match contains the :- pattern
 				hasDefault := strings.Contains(match[0], ":-")
-				
+
 				variable := Variable{
 					Name:       varName,
 					HasDefault: hasDefault,
 				}
-				
+
 				if hasDefault && len(match) >= 3 {
 					variable.DefaultValue = match[2] // Can be empty string
 				}
-				
+
 				variables = append(variables, variable)
 			}
 		}
