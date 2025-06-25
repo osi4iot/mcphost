@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/mark3labs/mcphost/internal/agent"
+	"github.com/mark3labs/mcphost/internal/auth"
 	"github.com/mark3labs/mcphost/internal/config"
 	"github.com/mark3labs/mcphost/internal/models"
 	"github.com/mark3labs/mcphost/internal/tokens"
@@ -183,6 +184,9 @@ func init() {
 	viper.BindPFlag("main-gpu", rootCmd.PersistentFlags().Lookup("main-gpu"))
 
 	// Defaults are already set in flag definitions, no need to duplicate in viper
+
+	// Add subcommands
+	rootCmd.AddCommand(authCmd)
 }
 
 func runMCPHost(ctx context.Context) error {
@@ -303,7 +307,16 @@ func runNormalMode(ctx context.Context) error {
 			if provider != "ollama" {
 				registry := models.GetGlobalRegistry()
 				if modelInfo, err := registry.ValidateModel(provider, modelID); err == nil {
-					usageTracker := ui.NewUsageTracker(modelInfo, provider, 80) // Will be updated with actual width
+					// Check if OAuth credentials are being used for Anthropic models
+					isOAuth := false
+					if provider == "anthropic" {
+						_, source, err := auth.GetAnthropicAPIKey(viper.GetString("provider-api-key"))
+						if err == nil && strings.HasPrefix(source, "stored OAuth") {
+							isOAuth = true
+						}
+					}
+					
+					usageTracker := ui.NewUsageTracker(modelInfo, provider, 80, isOAuth) // Will be updated with actual width
 					cli.SetUsageTracker(usageTracker)
 				}
 			}
