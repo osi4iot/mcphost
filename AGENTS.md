@@ -111,6 +111,19 @@ MCPHost includes a powerful script system for automation and reusable workflows.
 - **Edge Cases**: Empty defaults, complex values, mixed required/optional variables
 - **Backward Compatibility**: Ensures existing scripts continue working unchanged
 
+## Authentication System
+MCPHost includes optional OAuth authentication for Anthropic Claude as an alternative to API keys.
+
+### Authentication Commands
+- **Location**: `cmd/auth.go` (main implementation)
+- **Purpose**: Manage Anthropic OAuth credentials (alternative to API keys)
+- **Commands**: `login anthropic`, `logout anthropic`, `status`
+
+### OAuth Implementation
+- **Location**: `internal/auth/oauth.go` (OAuth client), `internal/auth/credentials.go` (credential management)
+- **Features**: PKCE security, automatic token refresh, encrypted storage, browser-based flow
+- **Priority**: OAuth credentials > API keys (environment variables/flags)
+
 ## Recent Bug Fixes
 
 ### Legacy MCP Server Configuration Fix

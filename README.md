@@ -574,6 +574,13 @@ mcphost -p "Generate a random UUID" --quiet | tr '[:lower:]' '[:upper:]'
 - `-p, --prompt string`: **Run in non-interactive mode with the given prompt**
 - `--quiet`: **Suppress all output except the AI response (only works with --prompt)**
 
+### Authentication Subcommands
+- `mcphost auth login anthropic`: Authenticate with Anthropic using OAuth (alternative to API keys)
+- `mcphost auth logout anthropic`: Remove stored OAuth credentials
+- `mcphost auth status`: Show authentication status
+
+**Note**: OAuth credentials (when present) take precedence over API keys from environment variables and `--provider-api-key` flags.
+
 #### Model Generation Parameters
 - `--max-tokens int`: Maximum number of tokens in the response (default: 4096)
 - `--temperature float32`: Controls randomness in responses (0.0-1.0, default: 0.7)
@@ -635,6 +642,13 @@ While chatting, you can use:
 - `/history`: Display conversation history
 - `/quit`: Exit the application
 - `Ctrl+C`: Exit at any time
+
+### Authentication Commands
+
+Optional OAuth authentication for Anthropic (alternative to API keys):
+- `mcphost auth login anthropic`: Authenticate using OAuth
+- `mcphost auth logout anthropic`: Remove stored OAuth credentials
+- `mcphost auth status`: Show authentication status
 
 ### Global Flags
 - `--config`: Specify custom config file location
