@@ -19,6 +19,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+
+
 var (
 	configFile       string
 	systemPromptFile string
@@ -74,7 +76,8 @@ Examples:
 	},
 }
 
-func Execute() {
+func Execute(v string) {
+	rootCmd.Version = v
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
