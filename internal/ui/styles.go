@@ -29,19 +29,44 @@ func GetMarkdownRenderer(width int) *glamour.TermRenderer {
 
 // generateMarkdownStyleConfig creates an ansi.StyleConfig for markdown rendering
 func generateMarkdownStyleConfig() ansi.StyleConfig {
-	// Define colors - using simple colors since we're not implementing theming
-	textColor := "#ffffff"
-	mutedColor := "#888888"
-	headingColor := "#00d7ff"
-	emphColor := "#ffff87"
-	strongColor := "#ffffff"
-	linkColor := "#5fd7ff"
-	codeColor := "#d7d7af"
-	errorColor := "#ff5f5f"
-	keywordColor := "#ff87d7"
-	stringColor := "#87ff87"
-	numberColor := "#ffaf87"
-	commentColor := "#5f5f87"
+	// Define adaptive colors based on terminal background
+	var textColor, mutedColor string
+	if lipgloss.HasDarkBackground() {
+		textColor = "#F9FAFB"  // Light text for dark backgrounds
+		mutedColor = "#9CA3AF" // Light muted for dark backgrounds
+	} else {
+		textColor = "#1F2937"  // Dark text for light backgrounds
+		mutedColor = "#6B7280" // Dark muted for light backgrounds
+	}
+	var headingColor, emphColor, strongColor, linkColor, codeColor, errorColor, keywordColor, stringColor, numberColor, commentColor string
+	if lipgloss.HasDarkBackground() {
+		// Dark background colors
+		headingColor = "#22D3EE" // Cyan
+		emphColor = "#FDE047"    // Yellow
+		strongColor = "#F9FAFB"  // Light gray
+		linkColor = "#60A5FA"    // Blue
+		codeColor = "#D1D5DB"    // Light gray
+		errorColor = "#F87171"   // Red
+		keywordColor = "#C084FC" // Purple
+		stringColor = "#34D399"  // Green
+		numberColor = "#FBBF24"  // Orange
+		commentColor = "#9CA3AF" // Muted gray
+	} else {
+		// Light background colors
+		headingColor = "#0891B2" // Dark cyan
+		emphColor = "#D97706"    // Orange
+		strongColor = "#1F2937"  // Dark gray
+		linkColor = "#2563EB"    // Blue
+		codeColor = "#374151"    // Dark gray
+		errorColor = "#DC2626"   // Red
+		keywordColor = "#7C3AED" // Purple
+		stringColor = "#059669"  // Green
+		numberColor = "#D97706"  // Orange
+		commentColor = "#6B7280" // Muted gray
+	}
+
+	// Don't apply background in markdown - let the block renderer handle it
+	bgColor := ""
 
 	return ansi.StyleConfig{
 		Document: ansi.StyleBlock{
@@ -50,7 +75,7 @@ func generateMarkdownStyleConfig() ansi.StyleConfig {
 				BlockSuffix: "",
 				Color:       stringPtr(textColor),
 			},
-			Margin: uintPtr(defaultMargin),
+			Margin: uintPtr(0), // Remove margin to prevent spacing
 		},
 		BlockQuote: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
@@ -59,12 +84,12 @@ func generateMarkdownStyleConfig() ansi.StyleConfig {
 				Prefix: "┃ ",
 			},
 			Indent:      uintPtr(1),
-			IndentToken: stringPtr(BaseStyle().Render(" ")),
+			IndentToken: stringPtr(lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: bgColor, Dark: bgColor}).Render(" ")),
 		},
 		List: ansi.StyleList{
-			LevelIndent: defaultMargin,
+			LevelIndent: 0, // Remove list indentation
 			StyleBlock: ansi.StyleBlock{
-				IndentToken: stringPtr(BaseStyle().Render(" ")),
+				IndentToken: stringPtr(lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: bgColor, Dark: bgColor}).Render(" ")),
 				StylePrimitive: ansi.StylePrimitive{
 					Color: stringPtr(textColor),
 				},
@@ -124,7 +149,8 @@ func generateMarkdownStyleConfig() ansi.StyleConfig {
 			Color:      stringPtr(mutedColor),
 		},
 		Emph: ansi.StylePrimitive{
-			Color:  stringPtr(emphColor),
+			Color: stringPtr(emphColor),
+
 			Italic: boolPtr(true),
 		},
 		Strong: ansi.StylePrimitive{
@@ -149,25 +175,30 @@ func generateMarkdownStyleConfig() ansi.StyleConfig {
 			Unticked:       "[ ] ",
 		},
 		Link: ansi.StylePrimitive{
-			Color:     stringPtr(linkColor),
+			Color: stringPtr(linkColor),
+
 			Underline: boolPtr(true),
 		},
 		LinkText: ansi.StylePrimitive{
 			Color: stringPtr(linkColor),
-			Bold:  boolPtr(true),
+
+			Bold: boolPtr(true),
 		},
 		Image: ansi.StylePrimitive{
-			Color:     stringPtr(linkColor),
+			Color: stringPtr(linkColor),
+
 			Underline: boolPtr(true),
 			Format:    "🖼 {{.text}}",
 		},
 		ImageText: ansi.StylePrimitive{
-			Color:  stringPtr(linkColor),
+			Color: stringPtr(linkColor),
+
 			Format: "{{.text}}",
 		},
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color:  stringPtr(codeColor),
+				Color: stringPtr(codeColor),
+
 				Prefix: "",
 				Suffix: "",
 			},
@@ -175,10 +206,10 @@ func generateMarkdownStyleConfig() ansi.StyleConfig {
 		CodeBlock: ansi.StyleCodeBlock{
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{
-					Prefix: " ",
+					Prefix: "",
 					Color:  stringPtr(codeColor),
 				},
-				Margin: uintPtr(defaultMargin),
+				Margin: uintPtr(0), // Remove margin
 			},
 			Chroma: &ansi.Chroma{
 				Text: ansi.StylePrimitive{
@@ -248,7 +279,8 @@ func generateMarkdownStyleConfig() ansi.StyleConfig {
 					Color: stringPtr(errorColor),
 				},
 				GenericEmph: ansi.StylePrimitive{
-					Color:  stringPtr(emphColor),
+					Color: stringPtr(emphColor),
+
 					Italic: boolPtr(true),
 				},
 				GenericInserted: ansi.StylePrimitive{
@@ -256,7 +288,8 @@ func generateMarkdownStyleConfig() ansi.StyleConfig {
 				},
 				GenericStrong: ansi.StylePrimitive{
 					Color: stringPtr(strongColor),
-					Bold:  boolPtr(true),
+
+					Bold: boolPtr(true),
 				},
 				GenericSubheading: ansi.StylePrimitive{
 					Color: stringPtr(headingColor),
