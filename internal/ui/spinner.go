@@ -51,17 +51,33 @@ func (m spinnerModel) View() string {
 	if m.quitting {
 		return ""
 	}
-	return fmt.Sprintf("%s %s", m.spinner.View(), m.message)
+
+	// Enhanced spinner display with better styling
+	baseStyle := lipgloss.NewStyle()
+	theme := GetTheme()
+
+	spinnerStyle := baseStyle.
+		Foreground(theme.Primary).
+		Bold(true)
+
+	messageStyle := baseStyle.
+		Foreground(theme.Text).
+		Italic(true)
+
+	return fmt.Sprintf("%s %s",
+		spinnerStyle.Render(m.spinner.View()),
+		messageStyle.Render(m.message))
 }
 
 // quitMsg is sent when we want to quit the spinner
 type quitMsg struct{}
 
-// NewSpinner creates a new spinner with the given message
+// NewSpinner creates a new spinner with enhanced styling
 func NewSpinner(message string) *Spinner {
 	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = s.Style.Foreground(lipgloss.Color("205")) // Purple color
+	s.Spinner = spinner.Points // More modern spinner style
+	theme := GetTheme()
+	s.Style = s.Style.Foreground(theme.Primary)
 
 	ctx, cancel := context.WithCancel(context.Background())
 

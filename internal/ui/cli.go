@@ -51,20 +51,27 @@ func (c *CLI) GetPrompt() (string, error) {
 	if c.usageTracker != nil {
 		usageInfo := c.usageTracker.RenderUsageInfo()
 		if usageInfo != "" {
-			fmt.Print(usageInfo)
+			paddedUsage := lipgloss.NewStyle().
+				PaddingLeft(2).
+				Render(usageInfo)
+			fmt.Print(paddedUsage)
 		}
 	}
 
-	// Create a divider before the input
+	// Create an enhanced divider with gradient effect
+	theme := GetTheme()
 	dividerStyle := lipgloss.NewStyle().
 		Width(c.width).
 		BorderTop(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(mutedColor).
+		BorderStyle(lipgloss.Border{
+			Top: "━",
+		}).
+		BorderForeground(theme.Border).
 		MarginTop(1).
-		MarginBottom(1)
+		MarginBottom(1).
+		PaddingLeft(2)
 
-	// Render the divider
+	// Render the enhanced input section
 	fmt.Print(dividerStyle.Render(""))
 
 	var prompt string
@@ -312,7 +319,14 @@ func (c *CLI) ClearMessages() {
 func (c *CLI) displayContainer() {
 	// Clear screen and display messages
 	fmt.Print("\033[2J\033[H") // Clear screen and move cursor to top
-	fmt.Print(c.messageContainer.Render())
+
+	// Add left padding to the entire container
+	content := c.messageContainer.Render()
+	paddedContent := lipgloss.NewStyle().
+		PaddingLeft(2).
+		Render(content)
+
+	fmt.Print(paddedContent)
 }
 
 // UpdateUsage updates the usage tracker with token counts and costs
@@ -393,7 +407,9 @@ func (c *CLI) updateSize() {
 		return
 	}
 
-	c.width = width
+	// Add left and right padding (4 characters total: 2 on each side)
+	paddingTotal := 4
+	c.width = width - paddingTotal
 	c.height = height
 
 	// Update renderers if they exist
