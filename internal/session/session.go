@@ -44,8 +44,6 @@ type ToolCall struct {
 	Arguments any    `json:"arguments"`
 }
 
-
-
 // NewSession creates a new session with default values
 func NewSession() *Session {
 	return &Session{
@@ -65,7 +63,7 @@ func (s *Session) AddMessage(msg Message) {
 	if msg.Timestamp.IsZero() {
 		msg.Timestamp = time.Now()
 	}
-	
+
 	s.Messages = append(s.Messages, msg)
 	s.UpdatedAt = time.Now()
 }
@@ -79,12 +77,12 @@ func (s *Session) SetMetadata(metadata Metadata) {
 // SaveToFile saves the session to a JSON file
 func (s *Session) SaveToFile(filePath string) error {
 	s.UpdatedAt = time.Now()
-	
+
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal session: %v", err)
 	}
-	
+
 	return os.WriteFile(filePath, data, 0644)
 }
 
@@ -94,12 +92,12 @@ func LoadFromFile(filePath string) (*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read session file: %v", err)
 	}
-	
+
 	var session Session
 	if err := json.Unmarshal(data, &session); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal session: %v", err)
 	}
-	
+
 	return &session, nil
 }
 
@@ -110,7 +108,7 @@ func ConvertFromSchemaMessage(msg *schema.Message) Message {
 		Content:   msg.Content,
 		Timestamp: time.Now(),
 	}
-	
+
 	// Convert tool calls if present (for assistant messages)
 	if len(msg.ToolCalls) > 0 {
 		sessionMsg.ToolCalls = make([]ToolCall, len(msg.ToolCalls))
@@ -122,12 +120,12 @@ func ConvertFromSchemaMessage(msg *schema.Message) Message {
 			}
 		}
 	}
-	
+
 	// Handle tool result messages - extract tool call ID from ToolCallID field
 	if msg.Role == schema.Tool && msg.ToolCallID != "" {
 		sessionMsg.ToolCallID = msg.ToolCallID
 	}
-	
+
 	return sessionMsg
 }
 
@@ -137,7 +135,7 @@ func (m *Message) ConvertToSchemaMessage() *schema.Message {
 		Role:    schema.RoleType(m.Role),
 		Content: m.Content,
 	}
-	
+
 	// Convert tool calls if present (for assistant messages)
 	if len(m.ToolCalls) > 0 {
 		msg.ToolCalls = make([]schema.ToolCall, len(m.ToolCalls))
@@ -152,7 +150,7 @@ func (m *Message) ConvertToSchemaMessage() *schema.Message {
 					argsStr = string(argBytes)
 				}
 			}
-			
+
 			msg.ToolCalls[i] = schema.ToolCall{
 				ID: tc.ID,
 				Function: schema.FunctionCall{
@@ -162,12 +160,12 @@ func (m *Message) ConvertToSchemaMessage() *schema.Message {
 			}
 		}
 	}
-	
+
 	// Handle tool result messages - set the tool call ID
 	if m.Role == "tool" && m.ToolCallID != "" {
 		msg.ToolCallID = m.ToolCallID
 	}
-	
+
 	return msg
 }
 

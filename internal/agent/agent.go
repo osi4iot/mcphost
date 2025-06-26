@@ -71,7 +71,7 @@ func NewAgent(ctx context.Context, config *AgentConfig) (*Agent, error) {
 
 // GenerateWithLoopResult contains the result and conversation history
 type GenerateWithLoopResult struct {
-	FinalResponse *schema.Message
+	FinalResponse        *schema.Message
 	ConversationMessages []*schema.Message // All messages in the conversation (including tool calls and results)
 }
 
@@ -201,7 +201,7 @@ func (a *Agent) GenerateWithLoop(ctx context.Context, messages []*schema.Message
 				onResponse(response.Content)
 			}
 			return &GenerateWithLoopResult{
-				FinalResponse: response,
+				FinalResponse:        response,
 				ConversationMessages: workingMessages,
 			}, nil
 		}
@@ -210,7 +210,7 @@ func (a *Agent) GenerateWithLoop(ctx context.Context, messages []*schema.Message
 	// If we reach here, we've exceeded max steps
 	finalResponse := schema.AssistantMessage("Maximum number of steps reached.", nil)
 	return &GenerateWithLoopResult{
-		FinalResponse: finalResponse,
+		FinalResponse:        finalResponse,
 		ConversationMessages: workingMessages,
 	}, nil
 }

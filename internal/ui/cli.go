@@ -278,7 +278,7 @@ func (c *CLI) IsSlashCommand(input string) bool {
 
 // SlashCommandResult represents the result of handling a slash command
 type SlashCommandResult struct {
-	Handled     bool
+	Handled      bool
 	ClearHistory bool
 }
 

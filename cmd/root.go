@@ -21,8 +21,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-
-
 var (
 	configFile       string
 	systemPromptFile string
@@ -405,17 +403,17 @@ func runNormalMode(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to load session: %v", err)
 		}
-		
+
 		// Convert session messages to schema messages
 		for _, msg := range loadedSession.Messages {
 			messages = append(messages, msg.ConvertToSchemaMessage())
 		}
-		
+
 		// If we're also saving, use the loaded session with the session manager
 		if saveSessionPath != "" {
 			sessionManager = session.NewManagerWithSession(loadedSession, saveSessionPath)
 		}
-		
+
 		if !quietFlag && cli != nil {
 			// Create a map of tool call IDs to tool calls for quick lookup
 			toolCallMap := make(map[string]session.ToolCall)
@@ -426,7 +424,7 @@ func runNormalMode(ctx context.Context) error {
 					}
 				}
 			}
-			
+
 			// Display all previous messages as they would have appeared
 			for _, sessionMsg := range loadedSession.Messages {
 				if sessionMsg.Role == "user" {
@@ -440,12 +438,12 @@ func runNormalMode(ctx context.Context) error {
 							if argBytes, err := json.Marshal(tc.Arguments); err == nil {
 								argsStr = string(argBytes)
 							}
-							
+
 							// Display tool call
 							cli.DisplayToolCallMessage(tc.Name, argsStr)
 						}
 					}
-					
+
 					// Display assistant response (only if there's content)
 					if sessionMsg.Content != "" {
 						cli.DisplayAssistantMessage(sessionMsg.Content)
@@ -459,10 +457,10 @@ func runNormalMode(ctx context.Context) error {
 							if argBytes, err := json.Marshal(toolCall.Arguments); err == nil {
 								argsStr = string(argBytes)
 							}
-							
+
 							// Parse tool result content - it might be JSON-encoded MCP content
 							resultContent := sessionMsg.Content
-							
+
 							// Try to parse as MCP content structure
 							var mcpContent struct {
 								Content []struct {
@@ -470,7 +468,7 @@ func runNormalMode(ctx context.Context) error {
 									Text string `json:"text"`
 								} `json:"content"`
 							}
-							
+
 							// First try to unmarshal as-is
 							if err := json.Unmarshal([]byte(sessionMsg.Content), &mcpContent); err == nil {
 								// Extract text from MCP content structure
@@ -488,7 +486,7 @@ func runNormalMode(ctx context.Context) error {
 									}
 								}
 							}
-							
+
 							// Display tool result (assuming no error for saved results)
 							cli.DisplayToolMessage(toolCall.Name, argsStr, resultContent, false)
 						}
@@ -499,7 +497,7 @@ func runNormalMode(ctx context.Context) error {
 	} else if saveSessionPath != "" {
 		// Only saving, create new session manager
 		sessionManager = session.NewManager(saveSessionPath)
-		
+
 		// Set metadata
 		sessionManager.SetMetadata(session.Metadata{
 			MCPHostVersion: "dev", // TODO: Get actual version
@@ -574,7 +572,7 @@ func runAgenticLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 				// Simple approach: save the entire conversation history
 				// This includes the user message + all generated messages
 				allMessages := append([]*schema.Message{userMsg}, conversationMessages...)
-				
+
 				// Clear the session and save the complete history
 				if err := config.SessionManager.ReplaceAllMessages(allMessages); err != nil {
 					// Log error but don't fail the operation
@@ -645,7 +643,7 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 			if !config.Quiet && cli != nil {
 				// Parse tool result content - it might be JSON-encoded MCP content
 				resultContent := result
-				
+
 				// Try to parse as MCP content structure
 				var mcpContent struct {
 					Content []struct {
@@ -653,7 +651,7 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 						Text string `json:"text"`
 					} `json:"content"`
 				}
-				
+
 				// First try to unmarshal as-is
 				if err := json.Unmarshal([]byte(result), &mcpContent); err == nil {
 					// Extract text from MCP content structure
@@ -671,7 +669,7 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 						}
 					}
 				}
-				
+
 				cli.DisplayToolMessage(toolName, toolArgs, resultContent, isError)
 				// Start spinner again for next LLM call
 				currentSpinner = ui.NewSpinner("Thinking...")
@@ -814,7 +812,7 @@ func runInteractiveLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 				// Log error but don't fail the operation
 				cli.DisplayError(fmt.Errorf("failed to save user message to session: %v", err))
 			}
-			
+
 			// Save all conversation messages (includes tool calls and results)
 			// Find the messages that were generated during this conversation
 			if len(conversationMessages) > len(tempMessages) {
