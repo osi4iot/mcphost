@@ -32,6 +32,7 @@ var (
 	quietFlag        bool
 	noExitFlag       bool
 	maxSteps         int
+	streamFlag       bool           // Enable streaming output
 	scriptMCPConfig  *config.Config // Used to override config in script mode
 
 	// Session management
@@ -163,6 +164,8 @@ func init() {
 		BoolVar(&noExitFlag, "no-exit", false, "prevent non-interactive mode from exiting, show input prompt instead")
 	rootCmd.PersistentFlags().
 		IntVar(&maxSteps, "max-steps", 0, "maximum number of agent steps (0 for unlimited)")
+	rootCmd.PersistentFlags().
+		BoolVar(&streamFlag, "stream", true, "enable streaming output for faster response display")
 
 	// Session management flags
 	rootCmd.PersistentFlags().
@@ -192,6 +195,7 @@ func init() {
 	viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
 	viper.BindPFlag("prompt", rootCmd.PersistentFlags().Lookup("prompt"))
 	viper.BindPFlag("max-steps", rootCmd.PersistentFlags().Lookup("max-steps"))
+	viper.BindPFlag("stream", rootCmd.PersistentFlags().Lookup("stream"))
 	viper.BindPFlag("provider-url", rootCmd.PersistentFlags().Lookup("provider-url"))
 	viper.BindPFlag("provider-api-key", rootCmd.PersistentFlags().Lookup("provider-api-key"))
 	viper.BindPFlag("max-tokens", rootCmd.PersistentFlags().Lookup("max-tokens"))
@@ -285,10 +289,11 @@ func runNormalMode(ctx context.Context) error {
 
 	// Create agent configuration
 	agentConfig := &agent.AgentConfig{
-		ModelConfig:  modelConfig,
-		MCPConfig:    mcpConfig,
-		SystemPrompt: systemPrompt,
-		MaxSteps:     viper.GetInt("max-steps"), // Pass 0 for infinite, agent will handle it
+		ModelConfig:      modelConfig,
+		MCPConfig:        mcpConfig,
+		SystemPrompt:     systemPrompt,
+		MaxSteps:         viper.GetInt("max-steps"), // Pass 0 for infinite, agent will handle it
+		StreamingEnabled: viper.GetBool("stream"),
 	}
 
 	// Create the agent with spinner for Ollama models
@@ -635,7 +640,40 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 		currentSpinner.Start()
 	}
 
-	result, err := mcpAgent.GenerateWithLoop(ctx, messages,
+	// Create streaming callback for real-time display
+	var streamingCallback agent.StreamingResponseHandler
+	var responseWasStreamed bool
+	var lastDisplayedContent string
+	var streamingContent strings.Builder
+	var streamingStarted bool
+	if cli != nil && !config.Quiet {
+		streamingCallback = func(chunk string) {
+			// Stop spinner before first chunk if still running
+			if currentSpinner != nil {
+				currentSpinner.Stop()
+				currentSpinner = nil
+			}
+			// Mark that this response is being streamed
+			responseWasStreamed = true
+
+			// Start streaming message on first chunk
+			if !streamingStarted {
+				cli.StartStreamingMessage(config.ModelName)
+				streamingStarted = true
+			}
+
+			// Accumulate content and update message
+			streamingContent.WriteString(chunk)
+			cli.UpdateStreamingMessage(streamingContent.String())
+		}
+	}
+
+	// Reset streaming state before agent execution
+	responseWasStreamed = false
+	streamingStarted = false
+	streamingContent.Reset()
+
+	result, err := mcpAgent.GenerateWithLoopAndStreaming(ctx, messages,
 		// Tool call handler - called when a tool is about to be executed
 		func(toolName, toolArgs string) {
 			if !config.Quiet && cli != nil {
@@ -713,18 +751,31 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 		},
 		// Tool call content handler - called when content accompanies tool calls
 		func(content string) {
-			if !config.Quiet && cli != nil {
+			if !config.Quiet && cli != nil && !responseWasStreamed {
+				// Only display if content wasn't already streamed
 				// Stop spinner before displaying content
 				if currentSpinner != nil {
 					currentSpinner.Stop()
 					currentSpinner = nil
 				}
 				cli.DisplayAssistantMessageWithModel(content, config.ModelName)
+				lastDisplayedContent = content
+				// Start spinner again for tool calls
+				currentSpinner = ui.NewSpinner("Thinking...")
+				currentSpinner.Start()
+			} else if responseWasStreamed {
+				// Content was already streamed, just track it and manage spinner
+				lastDisplayedContent = content
+				if currentSpinner != nil {
+					currentSpinner.Stop()
+					currentSpinner = nil
+				}
 				// Start spinner again for tool calls
 				currentSpinner = ui.NewSpinner("Thinking...")
 				currentSpinner.Start()
 			}
 		},
+		streamingCallback, // Add streaming callback as the last parameter
 	)
 
 	// Make sure spinner is stopped if still running
@@ -743,14 +794,17 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 	response := result.FinalResponse
 	conversationMessages := result.ConversationMessages
 
-	// Display assistant response with model name (skip if quiet)
-	if !config.Quiet && cli != nil {
+	// Display assistant response with model name
+	// Skip if: quiet mode, same content already displayed, or if streaming completed the full response
+	streamedFullResponse := responseWasStreamed && streamingContent.String() == response.Content
+	if !config.Quiet && cli != nil && response.Content != lastDisplayedContent && response.Content != "" && !streamedFullResponse {
 		if err := cli.DisplayAssistantMessageWithModel(response.Content, config.ModelName); err != nil {
 			cli.DisplayError(fmt.Errorf("display error: %v", err))
 			return nil, nil, err
 		}
-
-		// Update usage tracking with the last user message and response
+	} else if streamedFullResponse {
+		// Streaming was used - the message is already displayed in the message component
+		// Just update usage tracking with the last user message and response
 		if len(messages) > 0 {
 			lastUserMessage := ""
 			// Find the last user message

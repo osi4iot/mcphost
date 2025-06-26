@@ -143,24 +143,24 @@ func (c *CLI) DisplayToolMessage(toolName, toolArgs, toolResult string, isError 
 	c.displayContainer()
 }
 
-// DisplayStreamingMessage displays streaming content
-func (c *CLI) DisplayStreamingMessage(reader *schema.StreamReader[*schema.Message]) error {
-	// For streaming, we'll collect the content and then display it
-	var content strings.Builder
 
-	for {
-		msg, err := reader.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("stream receive error: %v", err)
-		}
-		content.WriteString(msg.Content)
-	}
 
-	return c.DisplayAssistantMessage(content.String())
+// StartStreamingMessage starts a streaming assistant message
+func (c *CLI) StartStreamingMessage(modelName string) {
+	// Add an empty assistant message that we'll update during streaming
+	msg := c.messageRenderer.RenderAssistantMessage("", time.Now(), modelName)
+	c.messageContainer.AddMessage(msg)
+	c.displayContainer()
 }
+
+// UpdateStreamingMessage updates the streaming message with new content
+func (c *CLI) UpdateStreamingMessage(content string) {
+	// Update the last message (which should be the streaming assistant message)
+	c.messageContainer.UpdateLastMessage(content)
+	c.displayContainer()
+}
+
+
 
 // DisplayError displays an error message using the message component
 func (c *CLI) DisplayError(err error) {
