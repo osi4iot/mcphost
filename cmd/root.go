@@ -767,7 +767,18 @@ func runInteractiveLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 
 		// Handle slash commands
 		if cli.IsSlashCommand(prompt) {
-			if cli.HandleSlashCommand(prompt, config.ServerNames, config.ToolNames, messages) {
+			result := cli.HandleSlashCommand(prompt, config.ServerNames, config.ToolNames, messages)
+			if result.Handled {
+				// If the command was to clear history, clear the messages slice and session
+				if result.ClearHistory {
+					messages = messages[:0] // Clear the slice
+					// Also clear session if available
+					if config.SessionManager != nil {
+						if err := config.SessionManager.ReplaceAllMessages([]*schema.Message{}); err != nil {
+							cli.DisplayError(fmt.Errorf("failed to clear session: %v", err))
+						}
+					}
+				}
 				continue
 			}
 			cli.DisplayError(fmt.Errorf("unknown command: %s", prompt))

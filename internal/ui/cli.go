@@ -276,36 +276,43 @@ func (c *CLI) IsSlashCommand(input string) bool {
 	return strings.HasPrefix(input, "/")
 }
 
-// HandleSlashCommand handles slash commands and returns true if handled
-func (c *CLI) HandleSlashCommand(input string, servers []string, tools []string, history []*schema.Message) bool {
+// SlashCommandResult represents the result of handling a slash command
+type SlashCommandResult struct {
+	Handled     bool
+	ClearHistory bool
+}
+
+// HandleSlashCommand handles slash commands and returns the result
+func (c *CLI) HandleSlashCommand(input string, servers []string, tools []string, history []*schema.Message) SlashCommandResult {
 	switch input {
 	case "/help":
 		c.DisplayHelp()
-		return true
+		return SlashCommandResult{Handled: true}
 	case "/tools":
 		c.DisplayTools(tools)
-		return true
+		return SlashCommandResult{Handled: true}
 	case "/servers":
 		c.DisplayServers(servers)
-		return true
+		return SlashCommandResult{Handled: true}
 	case "/history":
 		c.DisplayHistory(history)
-		return true
+		return SlashCommandResult{Handled: true}
 	case "/clear":
 		c.ClearMessages()
-		return true
+		c.DisplayInfo("Conversation cleared. Starting fresh.")
+		return SlashCommandResult{Handled: true, ClearHistory: true}
 	case "/usage":
 		c.DisplayUsageStats()
-		return true
+		return SlashCommandResult{Handled: true}
 	case "/reset-usage":
 		c.ResetUsageStats()
-		return true
+		return SlashCommandResult{Handled: true}
 	case "/quit":
 		fmt.Println("\nGoodbye!")
 		os.Exit(0)
-		return true
+		return SlashCommandResult{Handled: true}
 	default:
-		return false
+		return SlashCommandResult{Handled: false}
 	}
 }
 
