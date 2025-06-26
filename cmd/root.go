@@ -182,8 +182,9 @@ func init() {
 	flags.StringSliceVar(&stopSequences, "stop-sequences", nil, "custom stop sequences (comma-separated)")
 
 	// Ollama-specific parameters
-	flags.Int32Var(&numGPU, "num-gpu", 1, "number of GPUs to use for Ollama models")
-	flags.Int32Var(&mainGPU, "main-gpu", 0, "main GPU to use for Ollama models")
+	flags.Int32Var(&numGPU, "num-gpu-layers", -1, "number of model layers to offload to GPU for Ollama models (-1 for auto-detect)")
+	flags.MarkHidden("num-gpu-layers") // Advanced option, hidden from help
+	flags.Int32Var(&mainGPU, "main-gpu", 0, "main GPU device to use for Ollama models")
 
 	// Bind flags to viper for config file support
 	viper.BindPFlag("system-prompt", rootCmd.PersistentFlags().Lookup("system-prompt"))
@@ -198,7 +199,7 @@ func init() {
 	viper.BindPFlag("top-p", rootCmd.PersistentFlags().Lookup("top-p"))
 	viper.BindPFlag("top-k", rootCmd.PersistentFlags().Lookup("top-k"))
 	viper.BindPFlag("stop-sequences", rootCmd.PersistentFlags().Lookup("stop-sequences"))
-	viper.BindPFlag("num-gpu", rootCmd.PersistentFlags().Lookup("num-gpu"))
+	viper.BindPFlag("num-gpu-layers", rootCmd.PersistentFlags().Lookup("num-gpu-layers"))
 	viper.BindPFlag("main-gpu", rootCmd.PersistentFlags().Lookup("main-gpu"))
 
 	// Defaults are already set in flag definitions, no need to duplicate in viper
@@ -265,7 +266,7 @@ func runNormalMode(ctx context.Context) error {
 	temperature := float32(viper.GetFloat64("temperature"))
 	topP := float32(viper.GetFloat64("top-p"))
 	topK := int32(viper.GetInt("top-k"))
-	numGPU := int32(viper.GetInt("num-gpu"))
+	numGPU := int32(viper.GetInt("num-gpu-layers"))
 	mainGPU := int32(viper.GetInt("main-gpu"))
 
 	modelConfig := &models.ProviderConfig{
@@ -290,8 +291,27 @@ func runNormalMode(ctx context.Context) error {
 		MaxSteps:     viper.GetInt("max-steps"), // Pass 0 for infinite, agent will handle it
 	}
 
-	// Create the agent
-	mcpAgent, err := agent.NewAgent(ctx, agentConfig)
+	// Create the agent with spinner for Ollama models
+	var mcpAgent *agent.Agent
+
+	if strings.HasPrefix(viper.GetString("model"), "ollama:") && !quietFlag {
+		// Create a temporary CLI for the spinner
+		tempCli, tempErr := ui.NewCLI(viper.GetBool("debug"))
+		if tempErr == nil {
+			err = tempCli.ShowSpinner("Loading Ollama model...", func() error {
+				var agentErr error
+				mcpAgent, agentErr = agent.NewAgent(ctx, agentConfig)
+				return agentErr
+			})
+		} else {
+			// Fallback without spinner
+			mcpAgent, err = agent.NewAgent(ctx, agentConfig)
+		}
+	} else {
+		// No spinner for other providers
+		mcpAgent, err = agent.NewAgent(ctx, agentConfig)
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to create agent: %v", err)
 	}
@@ -344,8 +364,13 @@ func runNormalMode(ctx context.Context) error {
 		if len(parts) == 2 {
 			cli.DisplayInfo(fmt.Sprintf("Model loaded: %s (%s)", parts[0], parts[1]))
 		}
-		cli.DisplayInfo(fmt.Sprintf("Loaded %d tools from MCP servers", len(tools)))
 
+		// Display loading message if available (e.g., GPU fallback info)
+		if loadingMessage := mcpAgent.GetLoadingMessage(); loadingMessage != "" {
+			cli.DisplayInfo(loadingMessage)
+		}
+
+		cli.DisplayInfo(fmt.Sprintf("Loaded %d tools from MCP servers", len(tools)))
 		// Display debug configuration if debug mode is enabled
 		if viper.GetBool("debug") {
 			debugConfig := map[string]any{
@@ -361,7 +386,7 @@ func runNormalMode(ctx context.Context) error {
 
 			// Add Ollama-specific parameters if using Ollama
 			if strings.HasPrefix(viper.GetString("model"), "ollama:") {
-				debugConfig["num-gpu"] = viper.GetInt("num-gpu")
+				debugConfig["num-gpu-layers"] = viper.GetInt("num-gpu-layers")
 				debugConfig["main-gpu"] = viper.GetInt("main-gpu")
 			}
 
