@@ -384,7 +384,7 @@ func runNormalMode(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to create CLI: %v", err)
 		}
-		
+
 		// Set the model name for consistent display
 		cli.SetModelName(modelName)
 
