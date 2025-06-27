@@ -420,10 +420,20 @@ func (r *MessageRenderer) formatToolResult(toolName, result string, width int) s
 		}
 	}
 
-	// Format as code block for most tools
+	// Format bash/command output with better formatting
 	if strings.Contains(toolName, "bash") || strings.Contains(toolName, "command") {
-		formatted := fmt.Sprintf("```bash\n%s\n```", result)
-		return r.renderMarkdown(formatted, width)
+		theme := getTheme()
+		
+		// Split result into sections if it contains both stdout and stderr
+		if strings.Contains(result, "<stdout>") || strings.Contains(result, "<stderr>") {
+			return r.formatBashOutput(result, width, theme)
+		}
+		
+		// For simple output, just render as monospace text with proper line breaks
+		return baseStyle.
+			Width(width).
+			Foreground(theme.Muted).
+			Render(result)
 	}
 
 	// For other tools, render as muted text
@@ -432,6 +442,55 @@ func (r *MessageRenderer) formatToolResult(toolName, result string, width int) s
 		Width(width).
 		Foreground(theme.Muted).
 		Render(result)
+}
+
+// formatBashOutput formats bash command output with proper section handling
+func (r *MessageRenderer) formatBashOutput(result string, width int, theme Theme) string {
+	baseStyle := lipgloss.NewStyle()
+	
+	// Parse the output sections
+	lines := strings.Split(result, "\n")
+	var formattedLines []string
+	currentSection := ""
+	
+	for _, line := range lines {
+		if strings.HasPrefix(line, "<stdout>") {
+			currentSection = "stdout"
+			if len(strings.TrimSpace(strings.TrimPrefix(line, "<stdout>"))) > 0 {
+				// If there's content on the same line as <stdout>
+				content := strings.TrimSpace(strings.TrimPrefix(line, "<stdout>"))
+				formattedLines = append(formattedLines, content)
+			}
+			continue
+		} else if strings.HasPrefix(line, "<stderr>") {
+			currentSection = "stderr"
+			if len(strings.TrimSpace(strings.TrimPrefix(line, "<stderr>"))) > 0 {
+				// If there's content on the same line as <stderr>
+				content := strings.TrimSpace(strings.TrimPrefix(line, "<stderr>"))
+				styledLine := baseStyle.Foreground(theme.Error).Render(content)
+				formattedLines = append(formattedLines, styledLine)
+			}
+			continue
+		} else if line == "" {
+			// Preserve empty lines but don't add extra spacing
+			formattedLines = append(formattedLines, "")
+			continue
+		}
+		
+		// Regular content line
+		if currentSection == "stderr" {
+			styledLine := baseStyle.Foreground(theme.Error).Render(line)
+			formattedLines = append(formattedLines, styledLine)
+		} else {
+			// stdout or no section - use normal muted color
+			formattedLines = append(formattedLines, line)
+		}
+	}
+	
+	return baseStyle.
+		Width(width).
+		Foreground(theme.Muted).
+		Render(strings.Join(formattedLines, "\n"))
 }
 
 // truncateText truncates text to fit within the specified width
