@@ -158,8 +158,8 @@ func (a *Agent) GenerateWithLoopAndStreaming(ctx context.Context, messages []*sc
 		// Add response to working messages
 		workingMessages = append(workingMessages, response)
 
-	// Check if this is a tool call or final response
-	if len(response.ToolCalls) > 0 {
+		// Check if this is a tool call or final response
+		if len(response.ToolCalls) > 0 {
 			// Display any content that accompanies the tool calls
 			if response.Content != "" && onToolCallContent != nil {
 				onToolCallContent(response.Content)
@@ -251,8 +251,6 @@ func (a *Agent) GetLoadingMessage() string {
 	return a.loadingMessage
 }
 
-
-
 // generateWithCancellationAndStreaming calls the LLM with ESC key cancellation support and streaming callbacks
 func (a *Agent) generateWithCancellationAndStreaming(ctx context.Context, messages []*schema.Message, toolInfos []*schema.ToolInfo, streamingCallback StreamingResponseHandler) (*schema.Message, error) {
 	// Check if streaming is enabled
@@ -270,10 +268,6 @@ func (a *Agent) generateWithCancellationAndStreaming(ctx context.Context, messag
 	// Try streaming with tool call detection
 	return a.generateWithStreamingFirstAndCallback(ctx, messages, toolInfos, streamingCallback)
 }
-
-
-
-
 
 // generateWithStreamingAndCallback uses streaming for responses without tool calls with real-time callbacks
 func (a *Agent) generateWithStreamingAndCallback(ctx context.Context, messages []*schema.Message, toolInfos []*schema.ToolInfo, callback StreamingResponseHandler) (*schema.Message, error) {
@@ -323,8 +317,6 @@ func (a *Agent) generateWithStreamingFirstAndCallback(ctx context.Context, messa
 	// No need to restart - we have everything we need!
 	return response, nil
 }
-
-
 
 // generateWithoutStreaming uses the traditional non-streaming approach
 func (a *Agent) generateWithoutStreaming(ctx context.Context, messages []*schema.Message, toolInfos []*schema.ToolInfo) (*schema.Message, error) {

@@ -794,6 +794,23 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 	response := result.FinalResponse
 	conversationMessages := result.ConversationMessages
 
+	// Extract the last user message for usage tracking (do this once)
+	lastUserMessage := ""
+	if len(messages) > 0 {
+		// Find the last user message
+		for i := len(messages) - 1; i >= 0; i-- {
+			if messages[i].Role == schema.User {
+				lastUserMessage = messages[i].Content
+				break
+			}
+		}
+	}
+
+	// Update usage tracking for ALL responses (streaming and non-streaming)
+	if !config.Quiet && cli != nil {
+		cli.UpdateUsageFromResponse(response, lastUserMessage)
+	}
+
 	// Display assistant response with model name
 	// Skip if: quiet mode, same content already displayed, or if streaming completed the full response
 	streamedFullResponse := responseWasStreamed && streamingContent.String() == response.Content
@@ -802,23 +819,14 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 			cli.DisplayError(fmt.Errorf("display error: %v", err))
 			return nil, nil, err
 		}
-	} else if streamedFullResponse {
-		// Streaming was used - the message is already displayed in the message component
-		// Just update usage tracking with the last user message and response
-		if len(messages) > 0 {
-			lastUserMessage := ""
-			// Find the last user message
-			for i := len(messages) - 1; i >= 0; i-- {
-				if messages[i].Role == schema.User {
-					lastUserMessage = messages[i].Content
-					break
-				}
-			}
-			cli.UpdateUsageFromResponse(response, lastUserMessage)
-		}
 	} else if config.Quiet {
 		// In quiet mode, only output the final response content to stdout
 		fmt.Print(response.Content)
+	}
+
+	// Display usage information immediately after the response (for both streaming and non-streaming)
+	if !config.Quiet && cli != nil {
+		cli.DisplayUsageAfterResponse()
 	}
 
 	// Return the final response and all conversation messages

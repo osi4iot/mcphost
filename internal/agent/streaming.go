@@ -21,6 +21,7 @@ func StreamWithCallback(ctx context.Context, reader *schema.StreamReader[*schema
 	var content strings.Builder
 	var accumulatedToolCalls map[string]*schema.ToolCall // Track tool calls by ID to handle incremental updates
 	var streamComplete bool
+	var finalResponseMeta *schema.ResponseMeta // Accumulate response metadata from all chunks
 
 	accumulatedToolCalls = make(map[string]*schema.ToolCall)
 
@@ -48,6 +49,40 @@ func StreamWithCallback(ctx context.Context, reader *schema.StreamReader[*schema
 
 		// Accumulate content from all chunks
 		content.WriteString(msg.Content)
+
+		// Accumulate response metadata - merge from multiple chunks for accuracy
+		if msg.ResponseMeta != nil {
+			if finalResponseMeta == nil {
+				// First metadata we've seen - use as base
+				finalResponseMeta = &schema.ResponseMeta{}
+				if msg.ResponseMeta.Usage != nil {
+					finalResponseMeta.Usage = &schema.TokenUsage{}
+				}
+			}
+			
+			// Merge metadata intelligently to handle Anthropic's streaming behavior
+			if msg.ResponseMeta.Usage != nil && finalResponseMeta.Usage != nil {
+				usage := msg.ResponseMeta.Usage
+				
+				// Take PromptTokens from first chunk that has them (usually non-zero)
+				if finalResponseMeta.Usage.PromptTokens == 0 && usage.PromptTokens > 0 {
+					finalResponseMeta.Usage.PromptTokens = usage.PromptTokens
+				}
+				
+				// Always take the latest CompletionTokens (accumulates over chunks)
+				if usage.CompletionTokens > 0 {
+					finalResponseMeta.Usage.CompletionTokens = usage.CompletionTokens
+				}
+				
+				// Calculate TotalTokens from the components
+				finalResponseMeta.Usage.TotalTokens = finalResponseMeta.Usage.PromptTokens + finalResponseMeta.Usage.CompletionTokens
+			}
+			
+			// Preserve other metadata fields from the latest chunk
+			if msg.ResponseMeta.FinishReason != "" {
+				finalResponseMeta.FinishReason = msg.ResponseMeta.FinishReason
+			}
+		}
 
 		// Accumulate tool calls incrementally - Anthropic streams them piece by piece
 		// NOTE: We don't process these tool calls until EOF is reached
@@ -101,10 +136,11 @@ func StreamWithCallback(ctx context.Context, reader *schema.StreamReader[*schema
 		}
 	}
 
-	// Return complete message with all content and final tool calls
+	// Return complete message with all content, final tool calls, and preserved metadata
 	return &schema.Message{
-		Role:      schema.Assistant,
-		Content:   content.String(),
-		ToolCalls: finalToolCalls,
+		Role:         schema.Assistant,
+		Content:      content.String(),
+		ToolCalls:    finalToolCalls,
+		ResponseMeta: finalResponseMeta, // Preserve usage and other metadata from streaming
 	}, nil
 }

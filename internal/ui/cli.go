@@ -47,16 +47,8 @@ func (c *CLI) SetUsageTracker(tracker *UsageTracker) {
 
 // GetPrompt gets user input using the huh library with divider and padding
 func (c *CLI) GetPrompt() (string, error) {
-	// Display usage info if available
-	if c.usageTracker != nil {
-		usageInfo := c.usageTracker.RenderUsageInfo()
-		if usageInfo != "" {
-			paddedUsage := lipgloss.NewStyle().
-				PaddingLeft(2).
-				Render(usageInfo)
-			fmt.Print(paddedUsage)
-		}
-	}
+	// Usage info is now displayed immediately after responses via DisplayUsageAfterResponse()
+	// No need to display it here to avoid duplication
 
 	// Create an enhanced divider with gradient effect
 	theme := GetTheme()
@@ -357,11 +349,18 @@ func (c *CLI) UpdateUsageFromResponse(response *schema.Message, inputText string
 		inputTokens := int(usage.PromptTokens)
 		outputTokens := int(usage.CompletionTokens)
 
-		// Handle cache tokens if available (some providers support this)
-		cacheReadTokens := 0
-		cacheWriteTokens := 0
+		// Validate that the metadata seems reasonable
+		// If token counts are 0 or seem unrealistic, fall back to estimation
+		if inputTokens > 0 && outputTokens > 0 {
+			// Handle cache tokens if available (some providers support this)
+			cacheReadTokens := 0
+			cacheWriteTokens := 0
 
-		c.usageTracker.UpdateUsage(inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens)
+			c.usageTracker.UpdateUsage(inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens)
+		} else {
+			// Metadata exists but seems incomplete/unreliable, use estimation
+			c.usageTracker.EstimateAndUpdateUsage(inputText, response.Content)
+		}
 	} else {
 		// Fallback to estimation if no metadata is available
 		c.usageTracker.EstimateAndUpdateUsage(inputText, response.Content)
@@ -403,6 +402,22 @@ func (c *CLI) ResetUsageStats() {
 
 	c.usageTracker.Reset()
 	c.DisplayInfo("Usage statistics have been reset.")
+}
+
+// DisplayUsageAfterResponse displays usage information immediately after a response
+func (c *CLI) DisplayUsageAfterResponse() {
+	if c.usageTracker == nil {
+		return
+	}
+
+	usageInfo := c.usageTracker.RenderUsageInfo()
+	if usageInfo != "" {
+		paddedUsage := lipgloss.NewStyle().
+			PaddingLeft(2).
+			PaddingTop(1).
+			Render(usageInfo)
+		fmt.Print(paddedUsage)
+	}
 }
 
 // updateSize updates the CLI size based on terminal dimensions
