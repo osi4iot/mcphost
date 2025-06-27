@@ -334,40 +334,30 @@ func (r *MessageRenderer) RenderToolCallMessage(toolName, toolArgs string, times
 
 // RenderToolMessage renders a tool call message with proper styling
 func (r *MessageRenderer) RenderToolMessage(toolName, toolArgs, toolResult string, isError bool) UIMessage {
-	// Tool name and arguments header
 	theme := getTheme()
-	toolNameText := lipgloss.NewStyle().
-		Foreground(theme.Muted).
-		Render(fmt.Sprintf("%s: ", toolName))
 
-	argsText := lipgloss.NewStyle().
-		Foreground(theme.Muted).
-		Render(r.truncateText(toolArgs, r.width-8-lipgloss.Width(toolNameText)))
-
-	headerLine := lipgloss.JoinHorizontal(lipgloss.Left, toolNameText, argsText)
-
-	// Tool result styling
-	var resultContent string
+	// Tool result styling - no header since command is already shown in "Executing" message
+	var fullContent string
 	if isError {
-		resultContent = lipgloss.NewStyle().
+		fullContent = lipgloss.NewStyle().
 			Foreground(theme.Error).
 			Render(fmt.Sprintf("Error: %s", toolResult))
 	} else {
 		// Format result based on tool type
-		resultContent = r.formatToolResult(toolName, toolResult, r.width-8)
+		fullContent = r.formatToolResult(toolName, toolResult, r.width-8)
 	}
 
-	// Combine parts
-	var fullContent string
-	if resultContent != "" {
-		fullContent = headerLine + "\n" + strings.TrimSuffix(resultContent, "\n")
-	} else {
-		fullContent = headerLine
+	// Handle empty content
+	if strings.TrimSpace(fullContent) == "" {
+		fullContent = lipgloss.NewStyle().
+			Italic(true).
+			Foreground(theme.Muted).
+			Render("(no output)")
 	}
 
 	// Use the new block renderer
 	rendered := renderContentBlock(
-		fullContent,
+		strings.TrimSuffix(fullContent, "\n"),
 		r.width,
 		WithAlign(lipgloss.Left),
 		WithBorderColor(theme.Muted),
