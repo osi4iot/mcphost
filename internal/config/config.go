@@ -108,6 +108,7 @@ type Config struct {
 	ProviderURL    string                     `json:"provider-url,omitempty" yaml:"provider-url,omitempty"`
 	Prompt         string                     `json:"prompt,omitempty" yaml:"prompt,omitempty"`
 	NoExit         bool                       `json:"no-exit,omitempty" yaml:"no-exit,omitempty"`
+	Stream         *bool                      `json:"stream,omitempty" yaml:"stream,omitempty"`
 
 	// Model generation parameters
 	MaxTokens     int      `json:"max-tokens,omitempty" yaml:"max-tokens,omitempty"`

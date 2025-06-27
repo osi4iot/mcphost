@@ -127,6 +127,9 @@ func overrideConfigWithFrontmatter(scriptFile string, variables map[string]strin
 		// Set the global noExitFlag variable if it wasn't explicitly set via command line
 		noExitFlag = scriptConfig.NoExit
 	}
+	if scriptConfig.Stream != nil && !flagChanged("stream") {
+		viper.Set("stream", *scriptConfig.Stream)
+	}
 }
 
 // parseCustomVariables extracts custom variables from command line arguments
@@ -549,10 +552,11 @@ func runScriptMode(ctx context.Context, mcpConfig *config.Config, prompt string,
 
 	// Create agent configuration
 	agentConfig := &agent.AgentConfig{
-		ModelConfig:  modelConfig,
-		MCPConfig:    mcpConfig,
-		SystemPrompt: systemPrompt,
-		MaxSteps:     finalMaxSteps,
+		ModelConfig:      modelConfig,
+		MCPConfig:        mcpConfig,
+		SystemPrompt:     systemPrompt,
+		MaxSteps:         finalMaxSteps,
+		StreamingEnabled: viper.GetBool("stream"),
 	}
 
 	// Create the agent
