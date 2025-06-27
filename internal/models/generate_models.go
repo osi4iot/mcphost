@@ -158,6 +158,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Fix Google provider environment variables to match our implementation
+	if googleProvider, exists := providers["google"]; exists {
+		googleProvider.Env = []string{"GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"}
+		providers["google"] = googleProvider
+	}
+
 	// Generate Go code
 	tmpl, err := template.New("models").Parse(codeTemplate)
 	if err != nil {

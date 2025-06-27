@@ -57,16 +57,18 @@ func (r *ModelsRegistry) ValidateEnvironment(provider string, apiKey string) err
 		return nil
 	}
 
-	var missingVars []string
+	// Check if at least one environment variable is set
+	var foundVar bool
 	for _, envVar := range envVars {
-		if os.Getenv(envVar) == "" {
-			missingVars = append(missingVars, envVar)
+		if os.Getenv(envVar) != "" {
+			foundVar = true
+			break
 		}
 	}
 
-	if len(missingVars) > 0 {
-		return fmt.Errorf("missing required environment variables for %s: %s",
-			provider, strings.Join(missingVars, ", "))
+	if !foundVar {
+		return fmt.Errorf("missing required environment variables for %s: %s (at least one required)",
+			provider, strings.Join(envVars, ", "))
 	}
 
 	return nil

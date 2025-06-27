@@ -135,8 +135,6 @@ func (c *CLI) DisplayToolMessage(toolName, toolArgs, toolResult string, isError 
 	c.displayContainer()
 }
 
-
-
 // StartStreamingMessage starts a streaming assistant message
 func (c *CLI) StartStreamingMessage(modelName string) {
 	// Add an empty assistant message that we'll update during streaming
@@ -151,8 +149,6 @@ func (c *CLI) UpdateStreamingMessage(content string) {
 	c.messageContainer.UpdateLastMessage(content)
 	c.displayContainer()
 }
-
-
 
 // DisplayError displays an error message using the message component
 func (c *CLI) DisplayError(err error) {

@@ -342,7 +342,10 @@ func createGoogleProvider(ctx context.Context, config *ProviderConfig, modelName
 		apiKey = os.Getenv("GEMINI_API_KEY")
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("Google API key not provided. Use --provider-api-key flag or GOOGLE_API_KEY/GEMINI_API_KEY environment variable")
+		apiKey = os.Getenv("GOOGLE_GENERATIVE_AI_API_KEY")
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("Google API key not provided. Use --provider-api-key flag or GOOGLE_API_KEY/GEMINI_API_KEY/GOOGLE_GENERATIVE_AI_API_KEY environment variable")
 	}
 
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{

@@ -59,25 +59,25 @@ func StreamWithCallback(ctx context.Context, reader *schema.StreamReader[*schema
 					finalResponseMeta.Usage = &schema.TokenUsage{}
 				}
 			}
-			
+
 			// Merge metadata intelligently to handle Anthropic's streaming behavior
 			if msg.ResponseMeta.Usage != nil && finalResponseMeta.Usage != nil {
 				usage := msg.ResponseMeta.Usage
-				
+
 				// Take PromptTokens from first chunk that has them (usually non-zero)
 				if finalResponseMeta.Usage.PromptTokens == 0 && usage.PromptTokens > 0 {
 					finalResponseMeta.Usage.PromptTokens = usage.PromptTokens
 				}
-				
+
 				// Always take the latest CompletionTokens (accumulates over chunks)
 				if usage.CompletionTokens > 0 {
 					finalResponseMeta.Usage.CompletionTokens = usage.CompletionTokens
 				}
-				
+
 				// Calculate TotalTokens from the components
 				finalResponseMeta.Usage.TotalTokens = finalResponseMeta.Usage.PromptTokens + finalResponseMeta.Usage.CompletionTokens
 			}
-			
+
 			// Preserve other metadata fields from the latest chunk
 			if msg.ResponseMeta.FinishReason != "" {
 				finalResponseMeta.FinishReason = msg.ResponseMeta.FinishReason
