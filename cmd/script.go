@@ -99,6 +99,9 @@ func overrideConfigWithFrontmatter(scriptFile string, variables map[string]strin
 	if scriptConfig.Debug && !flagChanged("debug") {
 		viper.Set("debug", scriptConfig.Debug)
 	}
+	if scriptConfig.Compact && !flagChanged("compact") {
+		viper.Set("compact", scriptConfig.Compact)
+	}
 	if scriptConfig.SystemPrompt != "" && !flagChanged("system-prompt") {
 		viper.Set("system-prompt", scriptConfig.SystemPrompt)
 	}

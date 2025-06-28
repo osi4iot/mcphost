@@ -270,3 +270,36 @@ Hello John! Please analyze /tmp.`
 		t.Errorf("substituteVariables() backward compatibility failed.\nGot:\n%s\nWant:\n%s", result, expected)
 	}
 }
+
+func TestParseScriptContentWithCompactMode(t *testing.T) {
+	content := `---
+compact: true
+mcpServers:
+  todo:
+    type: "builtin"
+    name: "todo"
+---
+Test prompt with compact mode`
+
+	variables := make(map[string]string)
+	config, err := parseScriptContent(content, variables)
+	if err != nil {
+		t.Fatalf("parseScriptContent() failed: %v", err)
+	}
+
+	if !config.Compact {
+		t.Errorf("Expected compact mode to be true, got false")
+	}
+
+	if config.Prompt != "Test prompt with compact mode" {
+		t.Errorf("Expected prompt 'Test prompt with compact mode', got '%s'", config.Prompt)
+	}
+
+	if len(config.MCPServers) != 1 {
+		t.Errorf("Expected 1 MCP server, got %d", len(config.MCPServers))
+	}
+
+	if config.MCPServers["todo"].Type != "builtin" {
+		t.Errorf("Expected todo server type 'builtin', got '%s'", config.MCPServers["todo"].Type)
+	}
+}
