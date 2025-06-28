@@ -15,6 +15,7 @@ import (
 	"github.com/cloudwego/eino-ext/components/model/ollama"
 	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
+	"github.com/mark3labs/mcphost/internal/models/anthropic"
 	"github.com/mark3labs/mcphost/internal/models/openai"
 	"github.com/mark3labs/mcphost/internal/ui/progress"
 	"github.com/ollama/ollama/api"
@@ -273,7 +274,7 @@ func createAnthropicProvider(ctx context.Context, config *ProviderConfig, modelN
 		claudeConfig.StopSequences = config.StopSequences
 	}
 
-	return einoclaude.NewChatModel(ctx, claudeConfig)
+	return anthropic.NewCustomChatModel(ctx, claudeConfig)
 }
 
 func createOpenAIProvider(ctx context.Context, config *ProviderConfig, modelName string) (model.ToolCallingChatModel, error) {

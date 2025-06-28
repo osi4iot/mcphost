@@ -162,6 +162,19 @@ func (t *mcpToolImpl) Info(ctx context.Context) (*schema.ToolInfo, error) {
 
 // InvokableRun executes the tool by mapping back to the original name and server
 func (t *mcpToolImpl) InvokableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (string, error) {
+	// Handle empty or invalid JSON arguments
+	var arguments any
+	if argumentsInJSON == "" || argumentsInJSON == "{}" {
+		arguments = nil
+	} else {
+		// Validate that argumentsInJSON is valid JSON before using it
+		var temp any
+		if err := json.Unmarshal([]byte(argumentsInJSON), &temp); err != nil {
+			return "", fmt.Errorf("invalid JSON arguments: %w", err)
+		}
+		arguments = json.RawMessage(argumentsInJSON)
+	}
+
 	result, err := t.mapping.client.CallTool(ctx, mcp.CallToolRequest{
 		Request: mcp.Request{
 			Method: "tools/call",
@@ -172,7 +185,7 @@ func (t *mcpToolImpl) InvokableRun(ctx context.Context, argumentsInJSON string, 
 			Meta      *mcp.Meta `json:"_meta,omitempty"`
 		}{
 			Name:      t.mapping.originalName, // Use original name, not prefixed
-			Arguments: json.RawMessage(argumentsInJSON),
+			Arguments: arguments,
 		},
 	})
 	if err != nil {
