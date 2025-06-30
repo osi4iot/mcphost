@@ -2,7 +2,6 @@ package builtin
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -102,13 +101,11 @@ func TestTodoWrite(t *testing.T) {
 		t.Errorf("Expected 2 todos, got %d", len(storedTodos))
 	}
 
-	// Verify the content
+	// Verify the content is in readable format
 	if textContent, ok := mcp.AsTextContent(result.Content[0]); ok {
-		var resultTodos []TodoInfo
-		if err := json.Unmarshal([]byte(textContent.Text), &resultTodos); err != nil {
-			t.Errorf("Failed to parse result JSON: %v", err)
-		} else if len(resultTodos) != 2 {
-			t.Errorf("Expected 2 todos in result, got %d", len(resultTodos))
+		expectedOutput := "\n\n[ ] Test task 1\n[~] Test task 2"
+		if textContent.Text != expectedOutput {
+			t.Errorf("Expected formatted output:\n%s\nGot:\n%s", expectedOutput, textContent.Text)
 		}
 	} else {
 		t.Error("Expected text content")
@@ -148,15 +145,11 @@ func TestTodoRead(t *testing.T) {
 		t.Fatal("Expected result to have content")
 	}
 
-	// Verify the content
+	// Verify the content is in readable format
 	if textContent, ok := mcp.AsTextContent(result.Content[0]); ok {
-		var resultTodos []TodoInfo
-		if err := json.Unmarshal([]byte(textContent.Text), &resultTodos); err != nil {
-			t.Errorf("Failed to parse result JSON: %v", err)
-		} else if len(resultTodos) != 1 {
-			t.Errorf("Expected 1 todo in result, got %d", len(resultTodos))
-		} else if resultTodos[0].Content != "Existing task" {
-			t.Errorf("Expected 'Existing task', got '%s'", resultTodos[0].Content)
+		expectedOutput := "\n\n[ ] Existing task"
+		if textContent.Text != expectedOutput {
+			t.Errorf("Expected formatted output:\n%s\nGot:\n%s", expectedOutput, textContent.Text)
 		}
 	} else {
 		t.Error("Expected text content")
@@ -282,17 +275,27 @@ func TestTodoActiveCounting(t *testing.T) {
 		t.Fatalf("Failed to execute todowrite: %v", err)
 	}
 
-	// Check metadata for correct active count (should be 3: 2 pending + 1 in_progress)
+	// Check that metadata contains todos
 	if result.Meta == nil {
 		t.Fatal("Expected metadata to be non-nil")
 	}
 
-	title, ok := result.Meta["title"].(string)
+	metaTodos, ok := result.Meta["todos"].([]TodoInfo)
 	if !ok {
-		t.Fatal("Expected title in metadata")
+		t.Fatal("Expected todos in metadata")
 	}
 
-	if title != "3 todos" {
-		t.Errorf("Expected '3 todos', got '%s'", title)
+	if len(metaTodos) != 4 {
+		t.Errorf("Expected 4 todos in metadata, got %d", len(metaTodos))
+	}
+
+	// Verify the content is in readable format
+	if textContent, ok := mcp.AsTextContent(result.Content[0]); ok {
+		expectedOutput := "\n\n[ ] Task 1\n[~] Task 2\n[X] Task 3\n[ ] Task 4"
+		if textContent.Text != expectedOutput {
+			t.Errorf("Expected formatted output:\n%s\nGot:\n%s", expectedOutput, textContent.Text)
+		}
+	} else {
+		t.Error("Expected text content")
 	}
 }

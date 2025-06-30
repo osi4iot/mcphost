@@ -89,6 +89,36 @@ func (ts *TodoServer) getTodos() []TodoInfo {
 	return todos
 }
 
+// formatTodos returns a nice readable format for todos
+func formatTodos(todos []TodoInfo) string {
+	if len(todos) == 0 {
+		return "\n\nNo todos"
+	}
+
+	var result strings.Builder
+	result.WriteString("\n\n")
+	for _, todo := range todos {
+		var checkbox string
+		switch todo.Status {
+		case "completed":
+			checkbox = "[X]"
+		case "in_progress":
+			checkbox = "[~]"
+		default: // pending
+			checkbox = "[ ]"
+		}
+		result.WriteString(fmt.Sprintf("%s %s\n", checkbox, todo.Content))
+	}
+
+	// Remove trailing newline
+	output := result.String()
+	if len(output) > 0 {
+		output = output[:len(output)-1]
+	}
+
+	return output
+}
+
 // setTodos stores todos in memory
 func (ts *TodoServer) setTodos(todos []TodoInfo) {
 	ts.mutex.Lock()
@@ -136,24 +166,12 @@ func (ts *TodoServer) executeTodoWrite(ctx context.Context, request mcp.CallTool
 	// Store todos in memory
 	ts.setTodos(todos)
 
-	// Count non-completed todos
-	activeTodos := 0
-	for _, todo := range todos {
-		if todo.Status != "completed" {
-			activeTodos++
-		}
-	}
+	// Format output in readable format
+	output := formatTodos(todos)
 
-	// Format output
-	output, err := json.MarshalIndent(todos, "", "  ")
-	if err != nil {
-		return mcp.NewToolResultError("failed to format todos"), nil
-	}
-
-	// Create result with metadata
-	result := mcp.NewToolResultText(string(output))
+	// Create result with formatted output
+	result := mcp.NewToolResultText(output)
 	result.Meta = map[string]any{
-		"title": fmt.Sprintf("%d todos", activeTodos),
 		"todos": todos,
 	}
 
@@ -165,24 +183,12 @@ func (ts *TodoServer) executeTodoRead(ctx context.Context, request mcp.CallToolR
 	// Get todos from memory
 	todos := ts.getTodos()
 
-	// Count non-completed todos
-	activeTodos := 0
-	for _, todo := range todos {
-		if todo.Status != "completed" {
-			activeTodos++
-		}
-	}
+	// Format output in readable format
+	output := formatTodos(todos)
 
-	// Format output
-	output, err := json.MarshalIndent(todos, "", "  ")
-	if err != nil {
-		return mcp.NewToolResultError("failed to format todos"), nil
-	}
-
-	// Create result with metadata
-	result := mcp.NewToolResultText(string(output))
+	// Create result with formatted output
+	result := mcp.NewToolResultText(output)
 	result.Meta = map[string]any{
-		"title": fmt.Sprintf("%d todos", activeTodos),
 		"todos": todos,
 	}
 
