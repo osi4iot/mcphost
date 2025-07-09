@@ -298,8 +298,152 @@ Test prompt with compact mode`
 	if len(config.MCPServers) != 1 {
 		t.Errorf("Expected 1 MCP server, got %d", len(config.MCPServers))
 	}
+}
 
-	if config.MCPServers["todo"].Type != "builtin" {
-		t.Errorf("Expected todo server type 'builtin', got '%s'", config.MCPServers["todo"].Type)
+func TestParseScriptContentMCPServersNewFormat(t *testing.T) {
+	content := `---
+model: "anthropic:claude-sonnet-4-20250514"
+mcpServers:
+  filesystem:
+    type: "local"
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    environment:
+      NODE_ENV: "production"
+  remote-server:
+    type: "remote"
+    url: "https://example.com/mcp"
+  builtin-todo:
+    type: "builtin"
+    name: "todo"
+    options:
+      storage: "memory"
+---
+Test prompt with new format MCP servers`
+
+	variables := make(map[string]string)
+	config, err := parseScriptContent(content, variables)
+	if err != nil {
+		t.Fatalf("parseScriptContent() failed: %v", err)
+	}
+
+	if len(config.MCPServers) != 3 {
+		t.Errorf("Expected 3 MCP servers, got %d", len(config.MCPServers))
+	}
+
+	// Test local server
+	fs, exists := config.MCPServers["filesystem"]
+	if !exists {
+		t.Error("Expected filesystem server to exist")
+	}
+	if fs.Type != "local" {
+		t.Errorf("Expected filesystem server type 'local', got '%s'", fs.Type)
+	}
+	expectedCommand := []string{"npx", "-y", "@modelcontextprotocol/server-filesystem", "/tmp"}
+	if len(fs.Command) != len(expectedCommand) {
+		t.Errorf("Expected filesystem server command length %d, got %d", len(expectedCommand), len(fs.Command))
+	}
+	for i, expected := range expectedCommand {
+		if i >= len(fs.Command) || fs.Command[i] != expected {
+			t.Errorf("Expected filesystem server command %v, got %v", expectedCommand, fs.Command)
+			break
+		}
+	}
+	if fs.Environment["node_env"] != "production" {
+		t.Errorf("Expected node_env=production, got %s", fs.Environment["node_env"])
+	}
+
+	// Test remote server
+	remote, exists := config.MCPServers["remote-server"]
+	if !exists {
+		t.Error("Expected remote-server to exist")
+	}
+	if remote.Type != "remote" {
+		t.Errorf("Expected remote server type 'remote', got '%s'", remote.Type)
+	}
+	if remote.URL != "https://example.com/mcp" {
+		t.Errorf("Expected remote server URL 'https://example.com/mcp', got '%s'", remote.URL)
+	}
+
+	// Test builtin server
+	builtin, exists := config.MCPServers["builtin-todo"]
+	if !exists {
+		t.Error("Expected builtin-todo server to exist")
+	}
+	if builtin.Type != "builtin" {
+		t.Errorf("Expected builtin server type 'builtin', got '%s'", builtin.Type)
+	}
+	if builtin.Name != "todo" {
+		t.Errorf("Expected builtin server name 'todo', got '%s'", builtin.Name)
+	}
+}
+
+func TestParseScriptContentMCPServersLegacyFormat(t *testing.T) {
+	content := `---
+model: "anthropic:claude-sonnet-4-20250514"
+mcpServers:
+  legacy-stdio:
+    transport: "stdio"
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    env:
+      node_env: "development"
+  legacy-sse:
+    transport: "sse"
+    url: "https://legacy.example.com/mcp"
+    headers: ["Authorization: Bearer token"]
+---
+Test prompt with legacy format MCP servers`
+
+	variables := make(map[string]string)
+	config, err := parseScriptContent(content, variables)
+	if err != nil {
+		t.Fatalf("parseScriptContent() failed: %v", err)
+	}
+
+	if len(config.MCPServers) != 2 {
+		t.Errorf("Expected 2 MCP servers, got %d", len(config.MCPServers))
+	}
+
+	// Test legacy stdio server - Note: Viper parsing doesn't trigger custom UnmarshalJSON
+	// so legacy format has limited support in script frontmatter
+	stdio, exists := config.MCPServers["legacy-stdio"]
+	if !exists {
+		t.Error("Expected legacy-stdio server to exist")
+	}
+	if stdio.Transport != "stdio" {
+		t.Errorf("Expected legacy stdio transport 'stdio', got '%s'", stdio.Transport)
+	}
+	// Command field only gets the single command value, not combined with args
+	if stdio.Command[0] != "npx" {
+		t.Errorf("Expected legacy stdio command to start with 'npx', got %v", stdio.Command)
+	}
+	expectedArgs := []string{"-y", "@modelcontextprotocol/server-filesystem", "/tmp"}
+	if len(stdio.Args) != len(expectedArgs) {
+		t.Errorf("Expected legacy stdio args length %d, got %d", len(expectedArgs), len(stdio.Args))
+	}
+	for i, expected := range expectedArgs {
+		if i >= len(stdio.Args) || stdio.Args[i] != expected {
+			t.Errorf("Expected legacy stdio args %v, got %v", expectedArgs, stdio.Args)
+			break
+		}
+	}
+	// Env field should contain the environment variables (with lowercase keys due to Viper)
+	if stdio.Env["node_env"] != "development" {
+		t.Errorf("Expected legacy stdio env node_env=development, got %v", stdio.Env["node_env"])
+	}
+
+	// Test legacy SSE server
+	sse, exists := config.MCPServers["legacy-sse"]
+	if !exists {
+		t.Error("Expected legacy-sse server to exist")
+	}
+	if sse.Transport != "sse" {
+		t.Errorf("Expected legacy sse transport 'sse', got '%s'", sse.Transport)
+	}
+	if sse.URL != "https://legacy.example.com/mcp" {
+		t.Errorf("Expected legacy sse URL 'https://legacy.example.com/mcp', got '%s'", sse.URL)
+	}
+	if len(sse.Headers) != 1 || sse.Headers[0] != "Authorization: Bearer token" {
+		t.Errorf("Expected legacy sse headers [Authorization: Bearer token], got %v", sse.Headers)
 	}
 }

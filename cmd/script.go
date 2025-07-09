@@ -16,7 +16,6 @@ import (
 	"github.com/mark3labs/mcphost/internal/ui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
 )
 
 var scriptCmd = &cobra.Command{
@@ -344,12 +343,21 @@ func parseScriptContent(content string, variables map[string]string) (*config.Co
 		yamlLines = []string{} // Empty YAML
 	}
 
-	// Parse YAML frontmatter
+	// Parse YAML frontmatter using Viper for consistency with config file parsing
 	var scriptConfig config.Config
 	if len(yamlLines) > 0 {
 		yamlContent := strings.Join(yamlLines, "\n")
-		if err := yaml.Unmarshal([]byte(yamlContent), &scriptConfig); err != nil {
+
+		// Create temporary viper instance for frontmatter parsing
+		frontmatterViper := viper.New()
+		frontmatterViper.SetConfigType("yaml")
+
+		if err := frontmatterViper.ReadConfig(strings.NewReader(yamlContent)); err != nil {
 			return nil, fmt.Errorf("failed to parse YAML frontmatter: %v\nYAML content:\n%s", err, yamlContent)
+		}
+
+		if err := frontmatterViper.Unmarshal(&scriptConfig); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal frontmatter config: %v", err)
 		}
 	}
 

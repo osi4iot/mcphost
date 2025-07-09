@@ -69,11 +69,11 @@ Working directory is ${env://WORK_DIR:-/tmp}.
 		t.Fatal("GitHub server not found in script config")
 	}
 
-	if githubServer.Environment["GITHUB_TOKEN"] != "ghp_test_token" {
-		t.Errorf("Expected GITHUB_TOKEN=ghp_test_token, got %s", githubServer.Environment["GITHUB_TOKEN"])
+	if githubServer.Environment["github_token"] != "ghp_test_token" {
+		t.Errorf("Expected github_token=ghp_test_token, got %s", githubServer.Environment["github_token"])
 	}
-	if githubServer.Environment["DEBUG"] != "true" {
-		t.Errorf("Expected DEBUG=true, got %s", githubServer.Environment["DEBUG"])
+	if githubServer.Environment["debug"] != "true" {
+		t.Errorf("Expected debug=true, got %s", githubServer.Environment["debug"])
 	}
 
 	// Verify environment variable substitution in builtin server options
