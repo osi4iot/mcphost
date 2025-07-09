@@ -637,6 +637,40 @@ type AgenticLoopConfig struct {
 	SessionManager *session.Manager // for session persistence
 }
 
+// addMessagesToHistory adds messages to the conversation history and saves to session if available
+func addMessagesToHistory(messages *[]*schema.Message, sessionManager *session.Manager, cli *ui.CLI, newMessages ...*schema.Message) {
+	// Add to local history
+	*messages = append(*messages, newMessages...)
+
+	// Save to session if session manager is available
+	if sessionManager != nil {
+		// Use ReplaceAllMessages to ensure session matches local history exactly
+		if err := sessionManager.ReplaceAllMessages(*messages); err != nil {
+			// Log error but don't fail the operation
+			if cli != nil {
+				cli.DisplayError(fmt.Errorf("failed to save messages to session: %v", err))
+			}
+		}
+	}
+}
+
+// replaceMessagesHistory replaces the conversation history and saves to session if available
+func replaceMessagesHistory(messages *[]*schema.Message, sessionManager *session.Manager, cli *ui.CLI, newMessages []*schema.Message) {
+	// Replace local history
+	*messages = newMessages
+
+	// Save to session if session manager is available
+	if sessionManager != nil {
+		// Use ReplaceAllMessages to ensure session matches local history exactly
+		if err := sessionManager.ReplaceAllMessages(*messages); err != nil {
+			// Log error but don't fail the operation
+			if cli != nil {
+				cli.DisplayError(fmt.Errorf("failed to save messages to session: %v", err))
+			}
+		}
+	}
+}
+
 // runAgenticLoop handles all execution modes with a single unified loop
 func runAgenticLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, messages []*schema.Message, config AgenticLoopConfig) error {
 	// Handle initial prompt for non-interactive modes
@@ -650,7 +684,7 @@ func runAgenticLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 		tempMessages := append(messages, schema.UserMessage(config.InitialPrompt))
 
 		// Process the initial prompt with tool calls
-		response, conversationMessages, err := runAgenticStep(ctx, mcpAgent, cli, tempMessages, config)
+		_, conversationMessages, err := runAgenticStep(ctx, mcpAgent, cli, tempMessages, config)
 		if err != nil {
 			// Check if this was a user cancellation
 			if err.Error() == "generation cancelled by user" && cli != nil {
@@ -663,24 +697,8 @@ func runAgenticLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 			}
 		} else {
 			// Only add to history after successful completion
-			userMsg := schema.UserMessage(config.InitialPrompt)
-			messages = append(messages, userMsg)
-			messages = append(messages, response)
-
-			// Save to session if session manager is available
-			if config.SessionManager != nil {
-				// Simple approach: save the entire conversation history
-				// This includes the user message + all generated messages
-				allMessages := append([]*schema.Message{userMsg}, conversationMessages...)
-
-				// Clear the session and save the complete history
-				if err := config.SessionManager.ReplaceAllMessages(allMessages); err != nil {
-					// Log error but don't fail the operation
-					if cli != nil && !config.Quiet {
-						cli.DisplayError(fmt.Errorf("failed to save conversation to session: %v", err))
-					}
-				}
-			}
+			// conversationMessages already includes the user message, tool calls, and final response
+			replaceMessagesHistory(&messages, config.SessionManager, cli, conversationMessages)
 
 			// If not continuing to interactive mode, exit here
 			if !config.ContinueAfterRun {
@@ -931,12 +949,8 @@ func runInteractiveLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 				// If the command was to clear history, clear the messages slice and session
 				if result.ClearHistory {
 					messages = messages[:0] // Clear the slice
-					// Also clear session if available
-					if config.SessionManager != nil {
-						if err := config.SessionManager.ReplaceAllMessages([]*schema.Message{}); err != nil {
-							cli.DisplayError(fmt.Errorf("failed to clear session: %v", err))
-						}
-					}
+					// Use unified function to clear session as well
+					addMessagesToHistory(&messages, config.SessionManager, cli)
 				}
 				continue
 			}
@@ -951,7 +965,7 @@ func runInteractiveLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 		tempMessages := append(messages, schema.UserMessage(prompt))
 
 		// Process the user input with tool calls
-		response, conversationMessages, err := runAgenticStep(ctx, mcpAgent, cli, tempMessages, config)
+		_, conversationMessages, err := runAgenticStep(ctx, mcpAgent, cli, tempMessages, config)
 		if err != nil {
 			// Check if this was a user cancellation
 			if err.Error() == "generation cancelled by user" {
@@ -963,34 +977,8 @@ func runInteractiveLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 		}
 
 		// Only add to history after successful completion
-		userMsg := schema.UserMessage(prompt)
-		messages = append(messages, userMsg)
-		messages = append(messages, response)
-
-		// Save to session if session manager is available
-		if config.SessionManager != nil {
-			if err := config.SessionManager.AddMessage(userMsg); err != nil {
-				// Log error but don't fail the operation
-				cli.DisplayError(fmt.Errorf("failed to save user message to session: %v", err))
-			}
-
-			// Save all conversation messages (includes tool calls and results)
-			// Find the messages that were generated during this conversation
-			if len(conversationMessages) > len(tempMessages) {
-				// Extract only the new messages generated during this step
-				newMessages := conversationMessages[len(tempMessages):]
-				if err := config.SessionManager.AddMessages(newMessages); err != nil {
-					// Log error but don't fail the operation
-					cli.DisplayError(fmt.Errorf("failed to save conversation messages to session: %v", err))
-				}
-			} else {
-				// No tool calls, just save the final response
-				if err := config.SessionManager.AddMessage(response); err != nil {
-					// Log error but don't fail the operation
-					cli.DisplayError(fmt.Errorf("failed to save assistant message to session: %v", err))
-				}
-			}
-		}
+		// conversationMessages already includes the user message, tool calls, and final response
+		addMessagesToHistory(&messages, config.SessionManager, cli, conversationMessages...)
 	}
 }
 
