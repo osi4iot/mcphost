@@ -931,7 +931,7 @@ func runInteractiveLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 		// Get user input
 		prompt, err := cli.GetPrompt()
 		if err == io.EOF {
-			fmt.Println("\nGoodbye!")
+			fmt.Println("\n  Goodbye!")
 			return nil
 		}
 		if err != nil {
@@ -944,7 +944,7 @@ func runInteractiveLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 
 		// Handle slash commands
 		if cli.IsSlashCommand(prompt) {
-			result := cli.HandleSlashCommand(prompt, config.ServerNames, config.ToolNames, messages)
+			result := cli.HandleSlashCommand(prompt, config.ServerNames, config.ToolNames)
 			if result.Handled {
 				// If the command was to clear history, clear the messages slice and session
 				if result.ClearHistory {

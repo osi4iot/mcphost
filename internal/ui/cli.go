@@ -1,14 +1,13 @@
 package ui
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/huh"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cloudwego/eino/schema"
 	"golang.org/x/term"
@@ -71,23 +70,34 @@ func (c *CLI) GetPrompt() (string, error) {
 
 	// No divider needed - removed for cleaner appearance
 
-	var prompt string
-	err := huh.NewForm(huh.NewGroup(huh.NewText().
-		Title("Enter your prompt (Type /help for commands, Ctrl+C to quit, ESC to cancel generation)").
-		Value(&prompt).
-		CharLimit(5000)),
-	).WithWidth(c.width).
-		WithTheme(huh.ThemeCharm()).
-		Run()
+	// Create our custom slash command input
+	input := NewSlashCommandInput(c.width, "Enter your prompt (Type /help for commands, Ctrl+C to quit, ESC to cancel generation)")
+
+	// Run as a tea program
+	p := tea.NewProgram(input)
+	finalModel, err := p.Run()
 
 	if err != nil {
-		if errors.Is(err, huh.ErrUserAborted) {
-			return "", io.EOF // Signal clean exit
-		}
 		return "", err
 	}
 
-	return prompt, nil
+	// Get the value from the final model
+	if finalInput, ok := finalModel.(*SlashCommandInput); ok {
+		// Clear the input field from the display
+		linesToClear := finalInput.RenderedLines()
+		// We need to clear linesToClear - 1 lines because we're already on the line after the last rendered line
+		for i := 0; i < linesToClear-1; i++ {
+			fmt.Print("\033[1A\033[2K") // Move up one line and clear it
+		}
+
+		if finalInput.Cancelled() {
+			return "", io.EOF // Signal clean exit
+		}
+		value := strings.TrimSpace(finalInput.Value())
+		return value, nil
+	}
+
+	return "", fmt.Errorf("unexpected model type")
 }
 
 // ShowSpinner displays a spinner with the given message and executes the action
@@ -241,7 +251,6 @@ func (c *CLI) DisplayHelp() {
 - ` + "`/help`" + `: Show this help message
 - ` + "`/tools`" + `: List all available tools
 - ` + "`/servers`" + `: List configured MCP servers
-- ` + "`/history`" + `: Display conversation history
 - ` + "`/usage`" + `: Show token usage and cost statistics
 - ` + "`/reset-usage`" + `: Reset usage statistics
 - ` + "`/clear`" + `: Clear message history
@@ -295,36 +304,6 @@ func (c *CLI) DisplayServers(servers []string) {
 	c.displayContainer()
 }
 
-// DisplayHistory displays conversation history using the message container
-func (c *CLI) DisplayHistory(messages []*schema.Message) {
-	// Create a temporary container for history
-	historyContainer := NewMessageContainer(c.width, c.height-4, c.compactMode)
-
-	for _, msg := range messages {
-		switch msg.Role {
-		case schema.User:
-			var uiMsg UIMessage
-			if c.compactMode {
-				uiMsg = c.compactRenderer.RenderUserMessage(msg.Content, time.Now())
-			} else {
-				uiMsg = c.messageRenderer.RenderUserMessage(msg.Content, time.Now())
-			}
-			historyContainer.AddMessage(uiMsg)
-		case schema.Assistant:
-			var uiMsg UIMessage
-			if c.compactMode {
-				uiMsg = c.compactRenderer.RenderAssistantMessage(msg.Content, time.Now(), c.modelName)
-			} else {
-				uiMsg = c.messageRenderer.RenderAssistantMessage(msg.Content, time.Now(), c.modelName)
-			}
-			historyContainer.AddMessage(uiMsg)
-		}
-	}
-
-	fmt.Println("\nConversation History:")
-	fmt.Println(historyContainer.Render())
-}
-
 // IsSlashCommand checks if the input is a slash command
 func (c *CLI) IsSlashCommand(input string) bool {
 	return strings.HasPrefix(input, "/")
@@ -337,7 +316,7 @@ type SlashCommandResult struct {
 }
 
 // HandleSlashCommand handles slash commands and returns the result
-func (c *CLI) HandleSlashCommand(input string, servers []string, tools []string, history []*schema.Message) SlashCommandResult {
+func (c *CLI) HandleSlashCommand(input string, servers []string, tools []string) SlashCommandResult {
 	switch input {
 	case "/help":
 		c.DisplayHelp()
@@ -348,9 +327,7 @@ func (c *CLI) HandleSlashCommand(input string, servers []string, tools []string,
 	case "/servers":
 		c.DisplayServers(servers)
 		return SlashCommandResult{Handled: true}
-	case "/history":
-		c.DisplayHistory(history)
-		return SlashCommandResult{Handled: true}
+
 	case "/clear":
 		c.ClearMessages()
 		c.DisplayInfo("Conversation cleared. Starting fresh.")
@@ -362,7 +339,7 @@ func (c *CLI) HandleSlashCommand(input string, servers []string, tools []string,
 		c.ResetUsageStats()
 		return SlashCommandResult{Handled: true}
 	case "/quit":
-		fmt.Println("\nGoodbye!")
+		fmt.Println("\n  Goodbye!")
 		os.Exit(0)
 		return SlashCommandResult{Handled: true}
 	default:
