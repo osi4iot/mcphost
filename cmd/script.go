@@ -359,6 +359,37 @@ func parseScriptContent(content string, variables map[string]string) (*config.Co
 		if err := frontmatterViper.Unmarshal(&scriptConfig); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal frontmatter config: %v", err)
 		}
+
+		// Manually extract hyphenated keys that Viper might not handle correctly during unmarshal
+		if providerURL := frontmatterViper.GetString("provider-url"); providerURL != "" {
+			scriptConfig.ProviderURL = providerURL
+		}
+		if providerAPIKey := frontmatterViper.GetString("provider-api-key"); providerAPIKey != "" {
+			scriptConfig.ProviderAPIKey = providerAPIKey
+		}
+		if systemPrompt := frontmatterViper.GetString("system-prompt"); systemPrompt != "" {
+			scriptConfig.SystemPrompt = systemPrompt
+		}
+		if maxSteps := frontmatterViper.GetInt("max-steps"); maxSteps != 0 {
+			scriptConfig.MaxSteps = maxSteps
+		}
+		if maxTokens := frontmatterViper.GetInt("max-tokens"); maxTokens != 0 {
+			scriptConfig.MaxTokens = maxTokens
+		}
+		if topP := frontmatterViper.GetFloat64("top-p"); topP != 0 {
+			topPFloat32 := float32(topP)
+			scriptConfig.TopP = &topPFloat32
+		}
+		if topK := frontmatterViper.GetInt("top-k"); topK != 0 {
+			topKInt32 := int32(topK)
+			scriptConfig.TopK = &topKInt32
+		}
+		if stopSequences := frontmatterViper.GetStringSlice("stop-sequences"); len(stopSequences) > 0 {
+			scriptConfig.StopSequences = stopSequences
+		}
+		if noExit := frontmatterViper.GetBool("no-exit"); noExit {
+			scriptConfig.NoExit = noExit
+		}
 	}
 
 	// Set prompt from content after frontmatter
