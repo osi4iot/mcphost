@@ -39,7 +39,7 @@ func TestFetchServerRegistry(t *testing.T) {
 	}
 
 	// Test creating fetch server through registry
-	wrapper, err := registry.CreateServer("fetch", map[string]any{})
+	wrapper, err := registry.CreateServer("fetch", map[string]any{}, nil)
 	if err != nil {
 		t.Fatalf("Failed to create fetch server through registry: %v", err)
 	}

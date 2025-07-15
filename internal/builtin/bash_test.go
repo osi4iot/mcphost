@@ -36,7 +36,7 @@ func TestBashServerRegistry(t *testing.T) {
 	}
 
 	// Test creating bash server through registry
-	wrapper, err := registry.CreateServer("bash", map[string]any{})
+	wrapper, err := registry.CreateServer("bash", map[string]any{}, nil)
 	if err != nil {
 		t.Fatalf("Failed to create bash server through registry: %v", err)
 	}

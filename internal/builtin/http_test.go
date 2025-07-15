@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewHTTPServer(t *testing.T) {
-	server, err := NewHTTPServer()
+	server, err := NewHTTPServer(nil)
 	if err != nil {
 		t.Fatalf("Failed to create HTTP server: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestHTTPServerRegistry(t *testing.T) {
 	}
 
 	// Test creating HTTP server through registry
-	wrapper, err := registry.CreateServer("http", map[string]any{})
+	wrapper, err := registry.CreateServer("http", map[string]any{}, nil)
 	if err != nil {
 		t.Fatalf("Failed to create HTTP server through registry: %v", err)
 	}

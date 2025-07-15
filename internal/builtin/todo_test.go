@@ -36,7 +36,7 @@ func TestTodoServerRegistry(t *testing.T) {
 	}
 
 	// Test creating todo server through registry
-	wrapper, err := registry.CreateServer("todo", map[string]any{})
+	wrapper, err := registry.CreateServer("todo", map[string]any{}, nil)
 	if err != nil {
 		t.Fatalf("Failed to create todo server through registry: %v", err)
 	}
