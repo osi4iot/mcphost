@@ -235,7 +235,7 @@ Each builtin server entry requires:
 - `todo`: Manage ephemeral todo lists for task tracking during sessions
   - No configuration options required (todos are stored in memory and reset on restart)
 - `http`: Fetch web content and convert to text, markdown, or HTML formats
-  - Tools: `fetch` (fetch and convert web content), `fetch_summarize` (fetch and summarize web content using AI)
+  - Tools: `fetch` (fetch and convert web content), `fetch_summarize` (fetch and summarize web content using AI), `fetch_extract` (fetch and extract specific data using AI)
   - No configuration options required
 
 #### Builtin Server Examples

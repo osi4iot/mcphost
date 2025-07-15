@@ -70,6 +70,19 @@ func NewHTTPServer(llmModel model.ToolCallingChatModel) (*server.MCPServer, erro
 			),
 		)
 		s.AddTool(summarizeTool, executeHTTPFetchSummarize)
+
+		extractTool := mcp.NewTool("fetch_extract",
+			mcp.WithDescription(httpExtractDescription),
+			mcp.WithString("url",
+				mcp.Required(),
+				mcp.Description("The URL to fetch and extract data from"),
+			),
+			mcp.WithString("instructions",
+				mcp.Required(),
+				mcp.Description("Specific extraction instructions (e.g., 'Extract all product names and prices', 'Get the main article content', 'Find all email addresses')"),
+			),
+		)
+		s.AddTool(extractTool, executeHTTPFetchExtract)
 	}
 
 	return s, nil
@@ -303,6 +316,63 @@ func executeHTTPFetchSummarize(ctx context.Context, request mcp.CallToolRequest)
 	}, nil
 }
 
+// executeHTTPFetchExtract handles the fetch_extract tool execution
+func executeHTTPFetchExtract(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Get URL
+	urlStr, err := request.RequireString("url")
+	if err != nil {
+		return mcp.NewToolResultError("url parameter is required and must be a string"), nil
+	}
+
+	// Get extraction instructions
+	instructions, err := request.RequireString("instructions")
+	if err != nil {
+		return mcp.NewToolResultError("instructions parameter is required and must be a string"), nil
+	}
+
+	// Fetch content as text (reuse existing logic)
+	content, err := httpFetchAndExtractText(ctx, urlStr)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to fetch content: %v", err)), nil
+	}
+
+	// Check if we have a model available
+	if httpServerModel == nil {
+		return mcp.NewToolResultError("LLM model not available for extraction"), nil
+	}
+
+	// Create extraction prompt
+	extractionPrompt := fmt.Sprintf(`Extract the requested information from the following web content.
+
+Extraction Instructions: %s
+
+Web Content:
+%s
+
+Please extract only the requested information. If the requested information is not found, respond with "Information not found" and explain what was searched for.`, instructions, content)
+
+	// Create messages for the LLM
+	messages := []*schema.Message{
+		schema.UserMessage(extractionPrompt),
+	}
+
+	// Generate extraction using the model directly
+	response, err := httpServerModel.Generate(ctx, messages)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Extraction failed: %v", err)), nil
+	}
+
+	// Return extracted data
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			mcp.TextContent{
+				Type: "text",
+				Text: response.Content,
+			},
+		},
+	}, nil
+}
+
 // httpFetchAndExtractText fetches content from URL and extracts as text
 func httpFetchAndExtractText(ctx context.Context, urlStr string) (string, error) {
 	// Parse timeout (use default)
@@ -447,3 +517,18 @@ Usage notes:
   - Content is automatically extracted as text for summarization
   - Default instruction: "Provide a concise summary of this content"
   - Summary is limited to approximately 500 tokens`
+
+const httpExtractDescription = `Fetches web content and extracts specific data or sections using AI-powered extraction.
+
+- Fetches content from a specified URL using HTTP GET
+- Uses the client's LLM to extract specific information based on instructions
+- Supports flexible extraction instructions for various data types
+- Returns only the requested information from the web content
+
+Usage notes:
+  - Requires a client with sampling capability (LLM access)
+  - The URL must be a fully-formed valid URL
+  - Content is automatically extracted as text for processing
+  - Instructions should be specific (e.g., "Extract all product names and prices", "Get the main article content", "Find all email addresses")
+  - Returns "Information not found" if the requested data is not available
+  - Ideal for structured data extraction, content parsing, and targeted information retrieval`
