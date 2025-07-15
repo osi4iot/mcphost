@@ -8,20 +8,19 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/bytedance/sonic v1.13.3
-	github.com/charmbracelet/huh v0.3.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/cloudwego/eino v0.3.41
 	github.com/cloudwego/eino-ext/components/model/claude v0.0.0-20250609074000-b7f307dffa18
 	github.com/cloudwego/eino-ext/components/model/ollama v0.0.0-20250609074000-b7f307dffa18
 	github.com/cloudwego/eino-ext/components/model/openai v0.0.0-20250609074000-b7f307dffa18
 	github.com/mark3labs/mcp-filesystem-server v0.11.1
-	github.com/mark3labs/mcp-go v0.32.0
+	github.com/mark3labs/mcp-go v0.34.0
 	github.com/ollama/ollama v0.5.12
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.20.1
 	golang.org/x/term v0.31.0
 	google.golang.org/genai v1.10.0
-	gopkg.in/yaml.v3 v3.0.1
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 require github.com/getkin/kin-openapi v0.118.0
@@ -50,7 +49,6 @@ require (
 	github.com/aws/smithy-go v1.22.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
-	github.com/catppuccin/go v0.2.0 // indirect
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect

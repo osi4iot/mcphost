@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cloudwego/eino/components/model"
 	"github.com/mark3labs/mcp-filesystem-server/filesystemserver"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -26,13 +27,13 @@ func (w *BuiltinServerWrapper) GetServer() *server.MCPServer {
 
 // Registry holds all available builtin servers
 type Registry struct {
-	servers map[string]func(options map[string]any) (*BuiltinServerWrapper, error)
+	servers map[string]func(options map[string]any, model model.ToolCallingChatModel) (*BuiltinServerWrapper, error)
 }
 
 // NewRegistry creates a new builtin server registry
 func NewRegistry() *Registry {
 	r := &Registry{
-		servers: make(map[string]func(options map[string]any) (*BuiltinServerWrapper, error)),
+		servers: make(map[string]func(options map[string]any, model model.ToolCallingChatModel) (*BuiltinServerWrapper, error)),
 	}
 
 	// Register builtin servers
@@ -46,13 +47,13 @@ func NewRegistry() *Registry {
 }
 
 // CreateServer creates a new instance of a builtin server
-func (r *Registry) CreateServer(name string, options map[string]any) (*BuiltinServerWrapper, error) {
+func (r *Registry) CreateServer(name string, options map[string]any, model model.ToolCallingChatModel) (*BuiltinServerWrapper, error) {
 	factory, exists := r.servers[name]
 	if !exists {
 		return nil, fmt.Errorf("unknown builtin server: %s", name)
 	}
 
-	return factory(options)
+	return factory(options, model)
 }
 
 // ListServers returns a list of available builtin server names
@@ -66,7 +67,7 @@ func (r *Registry) ListServers() []string {
 
 // registerFilesystemServer registers the filesystem server
 func (r *Registry) registerFilesystemServer() {
-	r.servers["fs"] = func(options map[string]any) (*BuiltinServerWrapper, error) {
+	r.servers["fs"] = func(options map[string]any, model model.ToolCallingChatModel) (*BuiltinServerWrapper, error) {
 		// Extract allowed directories from options
 		var allowedDirs []string
 		if dirs, ok := options["allowed_directories"]; ok {
@@ -108,7 +109,7 @@ func (r *Registry) registerFilesystemServer() {
 
 // registerBashServer registers the bash server
 func (r *Registry) registerBashServer() {
-	r.servers["bash"] = func(options map[string]any) (*BuiltinServerWrapper, error) {
+	r.servers["bash"] = func(options map[string]any, model model.ToolCallingChatModel) (*BuiltinServerWrapper, error) {
 		// Create the bash server
 		server, err := NewBashServer()
 		if err != nil {
@@ -121,7 +122,7 @@ func (r *Registry) registerBashServer() {
 
 // registerTodoServer registers the todo server
 func (r *Registry) registerTodoServer() {
-	r.servers["todo"] = func(options map[string]any) (*BuiltinServerWrapper, error) {
+	r.servers["todo"] = func(options map[string]any, model model.ToolCallingChatModel) (*BuiltinServerWrapper, error) {
 		// Create the todo server
 		server, err := NewTodoServer()
 		if err != nil {
@@ -134,7 +135,7 @@ func (r *Registry) registerTodoServer() {
 
 // registerFetchServer registers the fetch server
 func (r *Registry) registerFetchServer() {
-	r.servers["fetch"] = func(options map[string]any) (*BuiltinServerWrapper, error) {
+	r.servers["fetch"] = func(options map[string]any, model model.ToolCallingChatModel) (*BuiltinServerWrapper, error) {
 		// Create the fetch server
 		server, err := NewFetchServer()
 		if err != nil {
@@ -147,9 +148,9 @@ func (r *Registry) registerFetchServer() {
 
 // registerHTTPServer registers the HTTP server
 func (r *Registry) registerHTTPServer() {
-	r.servers["http"] = func(options map[string]any) (*BuiltinServerWrapper, error) {
+	r.servers["http"] = func(options map[string]any, model model.ToolCallingChatModel) (*BuiltinServerWrapper, error) {
 		// Create the HTTP server
-		server, err := NewHTTPServer()
+		server, err := NewHTTPServer(model)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create HTTP server: %v", err)
 		}

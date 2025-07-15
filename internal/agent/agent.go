@@ -65,6 +65,10 @@ func NewAgent(ctx context.Context, config *AgentConfig) (*Agent, error) {
 
 	// Create and load MCP tools
 	toolManager := tools.NewMCPToolManager()
+
+	// Set the model for sampling support
+	toolManager.SetModel(providerResult.Model)
+
 	if err := toolManager.LoadTools(ctx, config.MCPConfig); err != nil {
 		return nil, fmt.Errorf("failed to load MCP tools: %v", err)
 	}

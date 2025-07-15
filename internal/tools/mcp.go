@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 	"github.com/getkin/kin-openapi/openapi3"
@@ -22,7 +23,8 @@ import (
 type MCPToolManager struct {
 	clients map[string]client.MCPClient
 	tools   []tool.BaseTool
-	toolMap map[string]*toolMapping // maps prefixed tool names to their server and original name
+	toolMap map[string]*toolMapping    // maps prefixed tool names to their server and original name
+	model   model.ToolCallingChatModel // LLM model for sampling
 }
 
 // toolMapping stores the mapping between prefixed tool names and their original details
@@ -45,6 +47,72 @@ func NewMCPToolManager() *MCPToolManager {
 		tools:   make([]tool.BaseTool, 0),
 		toolMap: make(map[string]*toolMapping),
 	}
+}
+
+// SetModel sets the LLM model for sampling support
+func (m *MCPToolManager) SetModel(model model.ToolCallingChatModel) {
+	m.model = model
+}
+
+// samplingHandler implements the MCP sampling handler interface
+type samplingHandler struct {
+	model model.ToolCallingChatModel
+}
+
+// CreateMessage handles sampling requests from MCP servers
+func (h *samplingHandler) CreateMessage(ctx context.Context, request mcp.CreateMessageRequest) (*mcp.CreateMessageResult, error) {
+	if h.model == nil {
+		return nil, fmt.Errorf("no model available for sampling")
+	}
+
+	// Convert MCP messages to eino messages
+	var messages []*schema.Message
+
+	// Add system message if provided
+	if request.SystemPrompt != "" {
+		messages = append(messages, schema.SystemMessage(request.SystemPrompt))
+	}
+
+	// Convert sampling messages
+	for _, msg := range request.Messages {
+		// Extract text content
+		var content string
+		if textContent, ok := msg.Content.(mcp.TextContent); ok {
+			content = textContent.Text
+		} else {
+			content = fmt.Sprintf("%v", msg.Content)
+		}
+
+		switch msg.Role {
+		case mcp.RoleUser:
+			messages = append(messages, schema.UserMessage(content))
+		case mcp.RoleAssistant:
+			messages = append(messages, schema.AssistantMessage(content, nil))
+		default:
+			messages = append(messages, schema.UserMessage(content)) // Default to user
+		}
+	}
+
+	// Generate response using the model (no config options for now)
+	response, err := h.model.Generate(ctx, messages)
+	if err != nil {
+		return nil, fmt.Errorf("model generation failed: %w", err)
+	}
+
+	// Convert response back to MCP format
+	result := &mcp.CreateMessageResult{
+		Model:      "mcphost-model", // Generic model name
+		StopReason: "endTurn",
+	}
+	result.SamplingMessage = mcp.SamplingMessage{
+		Role: mcp.RoleAssistant,
+		Content: mcp.TextContent{
+			Type: "text",
+			Text: response.Content,
+		},
+	}
+
+	return result, nil
 }
 
 // LoadTools loads tools from MCP servers based on configuration
@@ -278,9 +346,14 @@ func (m *MCPToolManager) createMCPClient(ctx context.Context, serverName string,
 			}
 		}
 
-		stdioClient, err := client.NewStdioMCPClient(command, env, args...)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create stdio client: %v", err)
+		// Create stdio transport
+		stdioTransport := transport.NewStdio(command, env, args...)
+
+		stdioClient := client.NewClient(stdioTransport)
+
+		// Start the transport
+		if err := stdioTransport.Start(ctx); err != nil {
+			return nil, fmt.Errorf("failed to start stdio transport: %v", err)
 		}
 
 		// Add a brief delay to allow the process to start and potentially fail
@@ -388,8 +461,8 @@ func (m *MCPToolManager) initializeClient(ctx context.Context, client client.MCP
 func (m *MCPToolManager) createBuiltinClient(ctx context.Context, serverName string, serverConfig config.MCPServerConfig) (client.MCPClient, error) {
 	registry := builtin.NewRegistry()
 
-	// Create the builtin server
-	builtinServer, err := registry.CreateServer(serverConfig.Name, serverConfig.Options)
+	// Create the builtin server, passing the model for servers that need it
+	builtinServer, err := registry.CreateServer(serverConfig.Name, serverConfig.Options, m.model)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create builtin server: %v", err)
 	}

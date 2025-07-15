@@ -11,6 +11,8 @@ import (
 
 	"github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -21,8 +23,14 @@ const (
 	httpMaxFetchTimeout     = 120 * time.Second
 )
 
+// httpServerModel holds the model for the HTTP server
+var httpServerModel model.ToolCallingChatModel
+
 // NewHTTPServer creates a new HTTP MCP server
-func NewHTTPServer() (*server.MCPServer, error) {
+func NewHTTPServer(llmModel model.ToolCallingChatModel) (*server.MCPServer, error) {
+	// Store the model globally for use in tool handlers
+	httpServerModel = llmModel
+
 	s := server.NewMCPServer("http-server", "1.0.0", server.WithToolCapabilities(true))
 
 	// Register the fetch tool
@@ -48,6 +56,21 @@ func NewHTTPServer() (*server.MCPServer, error) {
 	)
 
 	s.AddTool(fetchTool, executeHTTPFetch)
+
+	// Only add the summarize tool if we have a model
+	if llmModel != nil {
+		summarizeTool := mcp.NewTool("fetch_summarize",
+			mcp.WithDescription(httpSummarizeDescription),
+			mcp.WithString("url",
+				mcp.Required(),
+				mcp.Description("The URL to fetch and summarize"),
+			),
+			mcp.WithString("instructions",
+				mcp.Description("Optional summarization instructions (default: 'Provide a concise summary')"),
+			),
+		)
+		s.AddTool(summarizeTool, executeHTTPFetchSummarize)
+	}
 
 	return s, nil
 }
@@ -236,6 +259,164 @@ func httpConvertHTMLToMarkdown(htmlContent string) (string, error) {
 	return markdown, nil
 }
 
+// executeHTTPFetchSummarize handles the fetch_summarize tool execution
+func executeHTTPFetchSummarize(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Get URL
+	urlStr, err := request.RequireString("url")
+	if err != nil {
+		return mcp.NewToolResultError("url parameter is required and must be a string"), nil
+	}
+
+	// Get optional instructions
+	instructions := request.GetString("instructions", "Provide a concise summary of this content.")
+
+	// Fetch content as text (reuse existing logic)
+	content, err := httpFetchAndExtractText(ctx, urlStr)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to fetch content: %v", err)), nil
+	}
+
+	// Check if we have a model available
+	if httpServerModel == nil {
+		return mcp.NewToolResultError("LLM model not available for summarization"), nil
+	}
+
+	// Create messages for the LLM
+	messages := []*schema.Message{
+		schema.UserMessage(fmt.Sprintf("%s\n\nContent to summarize:\n%s", instructions, content)),
+	}
+
+	// Generate summary using the model directly
+	response, err := httpServerModel.Generate(ctx, messages)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Summarization failed: %v", err)), nil
+	}
+
+	// Return summary
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			mcp.TextContent{
+				Type: "text",
+				Text: response.Content,
+			},
+		},
+	}, nil
+}
+
+// httpFetchAndExtractText fetches content from URL and extracts as text
+func httpFetchAndExtractText(ctx context.Context, urlStr string) (string, error) {
+	// Parse timeout (use default)
+	timeout := httpDefaultFetchTimeout
+
+	// Validate URL
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL: %v", err)
+	}
+
+	// Ensure URL has a scheme
+	if parsedURL.Scheme == "" {
+		urlStr = "https://" + urlStr
+		parsedURL, err = url.Parse(urlStr)
+		if err != nil {
+			return "", fmt.Errorf("invalid URL after adding https: %v", err)
+		}
+	}
+
+	// Only allow HTTP and HTTPS
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return "", fmt.Errorf("URL must use http:// or https://")
+	}
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: timeout,
+	}
+
+	// Create request with context
+	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+
+	// Set headers to mimic a real browser
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+	// Make the request
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Check status code
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("request failed with status code: %d", resp.StatusCode)
+	}
+
+	// Check content length
+	if resp.ContentLength > httpMaxResponseSize {
+		return "", fmt.Errorf("response too large (exceeds 5MB limit)")
+	}
+
+	// Read response body with size limit
+	limitedReader := io.LimitReader(resp.Body, httpMaxResponseSize+1)
+	bodyBytes, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %v", err)
+	}
+
+	// Check if we exceeded the size limit
+	if len(bodyBytes) > httpMaxResponseSize {
+		return "", fmt.Errorf("response too large (exceeds 5MB limit)")
+	}
+
+	content := string(bodyBytes)
+	contentType := resp.Header.Get("Content-Type")
+
+	// Extract text content
+	if strings.Contains(contentType, "text/html") {
+		return httpExtractTextFromHTML(content)
+	}
+	return content, nil
+}
+
+// httpExtractTextFromHTML extracts plain text from HTML content
+func httpExtractTextFromHTML(htmlContent string) (string, error) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
+	if err != nil {
+		return "", err
+	}
+
+	// Remove script, style, and other non-content elements
+	doc.Find("script, style, noscript, iframe, object, embed").Remove()
+
+	// Extract text content
+	text := doc.Text()
+
+	// Clean up whitespace
+	lines := strings.Split(text, "\n")
+	var cleanLines []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			cleanLines = append(cleanLines, trimmed)
+		}
+	}
+
+	return strings.Join(cleanLines, "\n"), nil
+}
+
+// httpGetTextFromSamplingResult extracts text from sampling result
+func httpGetTextFromSamplingResult(result *mcp.CreateMessageResult) string {
+	if textContent, ok := result.Content.(mcp.TextContent); ok {
+		return textContent.Text
+	}
+	return fmt.Sprintf("%v", result.Content)
+}
+
 const httpFetchDescription = `Performs HTTP GET requests and returns content in HTML or Markdown format.
 
 - Fetches content from a specified URL using HTTP GET
@@ -252,3 +433,17 @@ Usage notes:
     - "markdown": HTML converted to markdown format
   - Use bodyOnly=true to extract only the <body> tag content (useful for reducing text)
   - Timeout can be specified in seconds (default 30s, max 120s)`
+
+const httpSummarizeDescription = `Fetches web content and returns an AI-generated summary using LLM sampling.
+
+- Fetches content from a specified URL using HTTP GET
+- Uses the client's LLM to generate an intelligent summary
+- Supports custom summarization instructions
+- Returns a concise AI-generated summary of the content
+
+Usage notes:
+  - Requires a client with sampling capability (LLM access)
+  - The URL must be a fully-formed valid URL
+  - Content is automatically extracted as text for summarization
+  - Default instruction: "Provide a concise summary of this content"
+  - Summary is limited to approximately 500 tokens`

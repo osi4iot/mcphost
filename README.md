@@ -234,7 +234,8 @@ Each builtin server entry requires:
   - No configuration options required
 - `todo`: Manage ephemeral todo lists for task tracking during sessions
   - No configuration options required (todos are stored in memory and reset on restart)
-- `fetch`: Fetch web content and convert to text, markdown, or HTML formats
+- `http`: Fetch web content and convert to text, markdown, or HTML formats
+  - Tools: `fetch` (fetch and convert web content), `fetch_summarize` (fetch and summarize web content using AI)
   - No configuration options required
 
 #### Builtin Server Examples
@@ -259,7 +260,7 @@ Each builtin server entry requires:
     },
     "web-fetcher": {
       "type": "builtin",
-      "name": "fetch"
+      "name": "http"
     }
   }
 }
