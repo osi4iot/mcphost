@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/tidwall/gjson"
 )
 
 const (
@@ -83,6 +85,24 @@ func NewHTTPServer(llmModel model.ToolCallingChatModel) (*server.MCPServer, erro
 			),
 		)
 		s.AddTool(extractTool, executeHTTPFetchExtract)
+
+		filterJSONTool := mcp.NewTool("fetch_filtered_json",
+			mcp.WithDescription(httpFilterJSONDescription),
+			mcp.WithString("url",
+				mcp.Required(),
+				mcp.Description("The URL to fetch JSON content from"),
+			),
+			mcp.WithString("path",
+				mcp.Required(),
+				mcp.Description("The gjson path expression to filter the JSON (e.g., 'users.#.name', 'data.items.0', 'results.#(age>25).name')"),
+			),
+			mcp.WithNumber("timeout",
+				mcp.Description("Optional timeout in seconds (max 120)"),
+				mcp.Min(0),
+				mcp.Max(120),
+			),
+		)
+		s.AddTool(filterJSONTool, executeHTTPFetchFilteredJSON)
 	}
 
 	return s, nil
@@ -479,6 +499,140 @@ func httpExtractTextFromHTML(htmlContent string) (string, error) {
 	return strings.Join(cleanLines, "\n"), nil
 }
 
+// executeHTTPFetchFilteredJSON handles the fetch_filtered_json tool execution
+func executeHTTPFetchFilteredJSON(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract parameters
+	urlStr, err := request.RequireString("url")
+	if err != nil {
+		return mcp.NewToolResultError("url parameter is required and must be a string"), nil
+	}
+
+	path, err := request.RequireString("path")
+	if err != nil {
+		return mcp.NewToolResultError("path parameter is required and must be a string"), nil
+	}
+
+	// Parse timeout (optional)
+	timeout := httpDefaultFetchTimeout
+	if timeoutSec := request.GetFloat("timeout", 0); timeoutSec > 0 {
+		timeoutDuration := time.Duration(timeoutSec) * time.Second
+		if timeoutDuration > httpMaxFetchTimeout {
+			timeout = httpMaxFetchTimeout
+		} else {
+			timeout = timeoutDuration
+		}
+	}
+
+	// Validate URL
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid URL: %v", err)), nil
+	}
+
+	// Ensure URL has a scheme
+	if parsedURL.Scheme == "" {
+		urlStr = "https://" + urlStr
+		parsedURL, err = url.Parse(urlStr)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid URL after adding https: %v", err)), nil
+		}
+	}
+
+	// Only allow HTTP and HTTPS
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return mcp.NewToolResultError("URL must use http:// or https://"), nil
+	}
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: timeout,
+	}
+
+	// Create request with context
+	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to create request: %v", err)), nil
+	}
+
+	// Set headers to mimic a real browser and accept JSON
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+	// Make the request
+	resp, err := client.Do(req)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("request failed: %v", err)), nil
+	}
+	defer resp.Body.Close()
+
+	// Check status code
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return mcp.NewToolResultError(fmt.Sprintf("request failed with status code: %d", resp.StatusCode)), nil
+	}
+
+	// Check content length
+	if resp.ContentLength > httpMaxResponseSize {
+		return mcp.NewToolResultError("response too large (exceeds 5MB limit)"), nil
+	}
+
+	// Read response body with size limit
+	limitedReader := io.LimitReader(resp.Body, httpMaxResponseSize+1)
+	bodyBytes, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to read response: %v", err)), nil
+	}
+
+	// Check if we exceeded the size limit
+	if len(bodyBytes) > httpMaxResponseSize {
+		return mcp.NewToolResultError("response too large (exceeds 5MB limit)"), nil
+	}
+
+	content := string(bodyBytes)
+
+	// Validate that the content is valid JSON
+	if !json.Valid(bodyBytes) {
+		return mcp.NewToolResultError("response is not valid JSON"), nil
+	}
+
+	// Apply gjson path to filter the JSON
+	result := gjson.Get(content, path)
+	if !result.Exists() {
+		return mcp.NewToolResultError(fmt.Sprintf("gjson path '%s' did not match any data", path)), nil
+	}
+
+	// Get the filtered JSON as a string
+	var filteredJSON string
+	if result.IsArray() || result.IsObject() {
+		filteredJSON = result.Raw
+	} else {
+		// For primitive values, wrap in quotes if it's a string
+		if result.Type == gjson.String {
+			filteredJSON = fmt.Sprintf(`"%s"`, result.Str)
+		} else {
+			filteredJSON = result.Raw
+		}
+	}
+
+	// Create result with metadata
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/json"
+	}
+
+	title := fmt.Sprintf("Filtered JSON from %s (path: %s)", urlStr, path)
+	mcpResult := mcp.NewToolResultText(filteredJSON)
+	mcpResult.Meta = map[string]any{
+		"title":       title,
+		"url":         urlStr,
+		"contentType": contentType,
+		"gjsonPath":   path,
+		"resultType":  result.Type.String(),
+	}
+
+	return mcpResult, nil
+}
+
 // httpGetTextFromSamplingResult extracts text from sampling result
 func httpGetTextFromSamplingResult(result *mcp.CreateMessageResult) string {
 	if textContent, ok := result.Content.(mcp.TextContent); ok {
@@ -532,3 +686,24 @@ Usage notes:
   - Instructions should be specific (e.g., "Extract all product names and prices", "Get the main article content", "Find all email addresses")
   - Returns "Information not found" if the requested data is not available
   - Ideal for structured data extraction, content parsing, and targeted information retrieval`
+
+const httpFilterJSONDescription = `Fetches JSON content from a URL and applies gjson path filtering to extract specific data.
+
+- Fetches JSON content from a specified URL using HTTP GET
+- Uses gjson path syntax to filter and extract specific parts of the JSON
+- Returns filtered JSON results based on the provided path expression
+- Supports all gjson features: wildcards, arrays, queries, modifiers, and more
+
+Usage notes:
+  - The URL must return valid JSON content
+  - Uses gjson path syntax for filtering (see https://github.com/tidwall/gjson/blob/master/SYNTAX.md)
+  - Common path examples:
+    - "users.#.name" - Get all user names from an array
+    - "data.items.0" - Get the first item from data.items array
+    - "results.#(age>25).name" - Get names where age > 25
+    - "friends.#(last==\"Murphy\")#.first" - Get first names of all Murphys
+    - "@reverse" - Reverse an array
+    - "users.#.{name,email}" - Create new objects with only name and email
+  - Returns error if path doesn't match any data
+  - Maximum response size is 5MB
+  - Timeout can be specified in seconds (default 30s, max 120s)`
