@@ -822,6 +822,8 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 	// Variables to store tool information for hooks
 	var currentToolName string
 	var currentToolArgs string
+	var toolIsBlocked bool
+	var blockReason string
 
 	result, err := mcpAgent.GenerateWithLoopAndStreaming(ctx, messages,
 		// Tool call handler - called when a tool is about to be executed
@@ -860,10 +862,13 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 
 					// Check if hook blocked the execution
 					if hookOutput != nil && hookOutput.Decision == "block" {
-						// We need a way to cancel the tool execution
-						// For now, just log it
+						toolIsBlocked = true
+						blockReason = hookOutput.Reason
+						if blockReason == "" {
+							blockReason = "Tool execution blocked by security policy"
+						}
 						if !config.Quiet && cli != nil {
-							cli.DisplayInfo(fmt.Sprintf("Tool execution blocked by hook: %s", hookOutput.Reason))
+							cli.DisplayInfo(fmt.Sprintf("Tool execution blocked by hook: %s", blockReason))
 						}
 					}
 				}
@@ -883,7 +888,28 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 		},
 		// Tool result handler - called when a tool execution completes
 		func(toolName, toolArgs, result string, isError bool) {
+			// Check if this tool was blocked
+			if toolIsBlocked {
+				// Reset the flag for next tool
+				toolIsBlocked = false
+
+				// Override the result with a block message
+				blockedResult := fmt.Sprintf(`{"error": "Tool execution blocked", "message": "%s"}`, blockReason)
+				result = blockedResult
+				isError = true
+
+				// Display the blocked message
+				if !config.Quiet && cli != nil {
+					cli.DisplayToolMessage(toolName, toolArgs, fmt.Sprintf("Tool execution blocked: %s", blockReason), true)
+				}
+
+				// Reset block reason
+				blockReason = ""
+				return
+			}
+
 			// Execute PostToolUse hooks
+			var postToolHookOutput *hooks.HookOutput
 			if hookExecutor != nil && result != "" {
 				input := &hooks.PostToolUseInput{
 					CommonInput:  hookExecutor.PopulateCommonFields(hooks.PostToolUse),
@@ -892,13 +918,21 @@ func runAgenticStep(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI, mes
 					ToolResponse: json.RawMessage(result),
 				}
 
-				_, err := hookExecutor.ExecuteHooks(ctx, hooks.PostToolUse, input)
+				hookOutput, err := hookExecutor.ExecuteHooks(ctx, hooks.PostToolUse, input)
 				if err != nil {
 					// Log error but don't fail
 					if debugMode {
 						fmt.Fprintf(os.Stderr, "PostToolUse hook execution error: %v\n", err)
 					}
 				}
+				postToolHookOutput = hookOutput
+			}
+
+			// Check if hook wants to suppress output
+			if postToolHookOutput != nil && postToolHookOutput.SuppressOutput {
+				// Skip displaying tool result to user
+				// Note: Result still goes to LLM unless ModifyOutput is used
+				return
 			}
 
 			if !config.Quiet && cli != nil {
@@ -1110,8 +1144,15 @@ func runInteractiveLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 				}
 				continue // Skip this prompt
 			}
-		}
 
+			// Check if hook wants to stop the session
+			if hookOutput != nil && hookOutput.Continue != nil && !*hookOutput.Continue {
+				if hookOutput.StopReason != "" {
+					cli.DisplayInfo(fmt.Sprintf("Session ended by hook: %s", hookOutput.StopReason))
+				}
+				return nil // Exit interactive loop gracefully
+			}
+		}
 		// Handle slash commands
 		if cli.IsSlashCommand(prompt) {
 			result := cli.HandleSlashCommand(prompt, config.ServerNames, config.ToolNames)
@@ -1133,7 +1174,6 @@ func runInteractiveLoop(ctx context.Context, mcpAgent *agent.Agent, cli *ui.CLI,
 
 		// Create temporary messages with user input for processing
 		tempMessages := append(messages, schema.UserMessage(prompt))
-
 		// Process the user input with tool calls
 		_, conversationMessages, err := runAgenticStep(ctx, mcpAgent, cli, tempMessages, config, hookExecutor)
 		if err != nil {
