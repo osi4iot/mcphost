@@ -1,8 +1,41 @@
 # MCPHost 🤖
 
-A CLI host application that enables Large Language Models (LLMs) to interact with external tools through the Model Context Protocol (MCP). Currently supports both Claude 3.5 Sonnet and Ollama models.
+A CLI host application that enables Large Language Models (LLMs) to interact with external tools through the Model Context Protocol (MCP). Currently supports Claude, OpenAI, Google Gemini, and Ollama models.
 
 Discuss the Project on [Discord](https://discord.gg/RqSS2NQVsY)
+
+## Table of Contents
+
+- [Overview](#overview-)
+- [Features](#features-)
+- [Requirements](#requirements-)
+- [Environment Setup](#environment-setup-)
+- [Installation](#installation-)
+- [Configuration](#configuration-)
+  - [MCP Servers](#mcp-servers)
+  - [Environment Variable Substitution](#environment-variable-substitution)
+  - [Simplified Configuration Schema](#simplified-configuration-schema)
+  - [Tool Filtering](#tool-filtering)
+  - [Legacy Configuration Support](#legacy-configuration-support)
+  - [Transport Types](#transport-types)
+  - [System Prompt](#system-prompt)
+- [Usage](#usage-)
+  - [Interactive Mode](#interactive-mode-default)
+  - [Script Mode](#script-mode)
+  - [Hooks System](#hooks-system)
+  - [Non-Interactive Mode](#non-interactive-mode)
+  - [Model Generation Parameters](#model-generation-parameters)
+  - [Available Models](#available-models)
+  - [Examples](#examples)
+  - [Flags](#flags)
+  - [Authentication Subcommands](#authentication-subcommands)
+  - [Configuration File Support](#configuration-file-support)
+  - [Interactive Commands](#interactive-commands)
+- [Automation & Scripting](#automation--scripting-)
+- [MCP Server Compatibility](#mcp-server-compatibility-)
+- [Contributing](#contributing-)
+- [License](#license-)
+- [Acknowledgments](#acknowledgments-)
 
 ## Overview 🌟
 
@@ -17,23 +50,28 @@ This architecture allows language models to:
 - Execute commands and retrieve information safely 🔒
 
 Currently supports:
-- Claude 3.5 Sonnet (claude-3-5-sonnet-20240620)
+- Anthropic Claude models (Claude 3.5 Sonnet, Claude 3.5 Haiku, etc.)
+- OpenAI models (GPT-4, GPT-4 Turbo, GPT-3.5, etc.)
+- Google Gemini models (Gemini 2.0 Flash, Gemini 1.5 Pro, etc.)
 - Any Ollama-compatible model with function calling support
-- Google Gemini models
-- Any OpenAI-compatible local or online model with function calling support
+- Any OpenAI-compatible API endpoint
 
 ## Features ✨
 
-- Interactive conversations with support models
+- Interactive conversations with multiple AI models
 - **Non-interactive mode** for scripting and automation
 - **Script mode** for executable YAML-based automation scripts
 - Support for multiple concurrent MCP servers
 - **Tool filtering** with `allowedTools` and `excludedTools` per server
 - Dynamic tool discovery and integration
-- Tool calling capabilities for both model types
+- Tool calling capabilities across all supported models
 - Configurable MCP server locations and arguments
 - Consistent command interface across model types
 - Configurable message history window for context management
+- **OAuth authentication** support for Anthropic (alternative to API keys)
+- **Hooks system** for custom integrations and security policies
+- **Environment variable substitution** in configs and scripts
+- **Builtin servers** for common functionality (filesystem, bash, todo, http)
 
 ## Requirements 📋
 
@@ -64,7 +102,7 @@ ollama pull mistral
 ollama serve
 ```
 
-You can also configure the Ollama client using standard environment variables, such as `OLLAMA HOST` for the Ollama base URL.
+You can also configure the Ollama client using standard environment variables, such as `OLLAMA_HOST` for the Ollama base URL.
 
 3. Google API Key (for Gemini):
 ```bash
@@ -392,11 +430,6 @@ You can specify a custom system prompt using the `--system-prompt` flag. You can
    - Explain your reasoning
    ```
 
-Usage:
-```bash
-mcphost --system-prompt ./my-system-prompt.json
-```
-
 
 ## Usage 🚀
 
@@ -664,10 +697,11 @@ These parameters work with all supported providers (OpenAI, Anthropic, Google, O
 
 ### Available Models
 Models can be specified using the `--model` (`-m`) flag:
-- Anthropic Claude (default): `anthropic:claude-3-5-sonnet-latest`
-- OpenAI or OpenAI-compatible: `openai:gpt-4`
-- Ollama models: `ollama:modelname`
-- Google: `google:gemini-2.0-flash`
+- **Anthropic Claude** (default): `anthropic:claude-sonnet-4-20250514`, `anthropic:claude-3-5-sonnet-latest`, `anthropic:claude-3-5-haiku-latest`
+- **OpenAI**: `openai:gpt-4`, `openai:gpt-4-turbo`, `openai:gpt-3.5-turbo`
+- **Google Gemini**: `google:gemini-2.0-flash`, `google:gemini-1.5-pro`
+- **Ollama models**: `ollama:llama3.2`, `ollama:qwen2.5:3b`, `ollama:mistral`
+- **OpenAI-compatible**: Any model via custom endpoint with `--provider-url`
 
 ### Examples
 
