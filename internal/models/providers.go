@@ -16,14 +16,14 @@ import (
 	"github.com/cloudwego/eino-ext/components/model/ollama"
 	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
-	"github.com/mark3labs/mcphost/internal/models/anthropic"
-	"github.com/mark3labs/mcphost/internal/models/openai"
-	"github.com/mark3labs/mcphost/internal/ui/progress"
+	"github.com/osi4iot/mcphost/internal/models/anthropic"
+	"github.com/osi4iot/mcphost/internal/models/openai"
+	"github.com/osi4iot/mcphost/internal/ui/progress"
 	"github.com/ollama/ollama/api"
 	"google.golang.org/genai"
 
-	"github.com/mark3labs/mcphost/internal/auth"
-	"github.com/mark3labs/mcphost/internal/models/gemini"
+	"github.com/osi4iot/mcphost/internal/auth"
+	"github.com/osi4iot/mcphost/internal/models/gemini"
 )
 
 const (

@@ -3,7 +3,7 @@ package mcphost
 import (
 	"time"
 
-	"github.com/mark3labs/mcphost/internal/config"
+	"github.com/osi4iot/mcphost/internal/config"
 )
 
 type Config = config.Config

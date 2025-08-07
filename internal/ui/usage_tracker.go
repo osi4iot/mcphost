@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mark3labs/mcphost/internal/models"
-	"github.com/mark3labs/mcphost/internal/tokens"
+	"github.com/osi4iot/mcphost/internal/models"
+	"github.com/osi4iot/mcphost/internal/tokens"
 )
 
 // UsageStats represents token and cost information for a single request/response

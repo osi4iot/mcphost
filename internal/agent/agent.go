@@ -9,9 +9,9 @@ import (
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcphost/internal/config"
-	"github.com/mark3labs/mcphost/internal/models"
-	"github.com/mark3labs/mcphost/internal/tools"
+	"github.com/osi4iot/mcphost/internal/config"
+	"github.com/osi4iot/mcphost/internal/models"
+	"github.com/osi4iot/mcphost/internal/tools"
 	"strings"
 	"time"
 )

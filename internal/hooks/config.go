@@ -3,7 +3,7 @@ package hooks
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/mark3labs/mcphost/internal/config"
+	"github.com/osi4iot/mcphost/internal/config"
 	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"

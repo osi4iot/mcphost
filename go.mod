@@ -1,4 +1,4 @@
-module github.com/mark3labs/mcphost
+module github.com/osi4iot/mcphost
 
 go 1.23.4
 

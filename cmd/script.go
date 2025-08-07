@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/cloudwego/eino/schema"
-	"github.com/mark3labs/mcphost/internal/agent"
-	"github.com/mark3labs/mcphost/internal/config"
-	"github.com/mark3labs/mcphost/internal/hooks"
-	"github.com/mark3labs/mcphost/internal/models"
-	"github.com/mark3labs/mcphost/internal/ui"
+	"github.com/osi4iot/mcphost/internal/agent"
+	"github.com/osi4iot/mcphost/internal/config"
+	"github.com/osi4iot/mcphost/internal/hooks"
+	"github.com/osi4iot/mcphost/internal/models"
+	"github.com/osi4iot/mcphost/internal/ui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

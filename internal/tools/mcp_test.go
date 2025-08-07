@@ -7,7 +7,7 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/mark3labs/mcphost/internal/config"
+	"github.com/osi4iot/mcphost/internal/config"
 )
 
 func TestMCPToolManager_LoadTools_WithTimeout(t *testing.T) {

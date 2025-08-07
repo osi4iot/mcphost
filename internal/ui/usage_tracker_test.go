@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/mark3labs/mcphost/internal/models"
+	"github.com/osi4iot/mcphost/internal/models"
 )
 
 func TestUsageTracker_OAuthCosts(t *testing.T) {

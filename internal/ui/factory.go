@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mark3labs/mcphost/internal/auth"
-	"github.com/mark3labs/mcphost/internal/models"
+	"github.com/osi4iot/mcphost/internal/auth"
+	"github.com/osi4iot/mcphost/internal/models"
 )
 
 // AgentInterface defines the interface we need from agent to avoid import cycles

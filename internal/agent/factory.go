@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mark3labs/mcphost/internal/config"
-	"github.com/mark3labs/mcphost/internal/models"
+	"github.com/osi4iot/mcphost/internal/config"
+	"github.com/osi4iot/mcphost/internal/models"
 )
 
 // SpinnerFunc is a function type for showing spinners during agent creation

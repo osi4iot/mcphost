@@ -11,8 +11,8 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcphost/internal/builtin"
-	"github.com/mark3labs/mcphost/internal/config"
+	"github.com/osi4iot/mcphost/internal/builtin"
+	"github.com/osi4iot/mcphost/internal/config"
 )
 
 // ConnectionPoolConfig configuration for connection pool
