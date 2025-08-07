@@ -3,7 +3,7 @@
 aidocs/
 .mcp.json
 *.log
-mcphost
+./mcphost
 .idea
 test/
 build/
