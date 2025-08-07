@@ -9,4 +9,5 @@ test/
 build/
 dist/
 contribute/output/
+update_module.sh
 CONTEXT.md
