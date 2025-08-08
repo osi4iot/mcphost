@@ -42,7 +42,6 @@ type HostInfo struct {
 
 type mcpHost struct {
 	id          string
-	natsClient  *natsClient
 	config      *HostConfig
 	initialized bool
 	serverNames []string
@@ -59,11 +58,6 @@ type mcpHost struct {
 func NewMCPHost(hostConfig *HostConfig) (MCPHost, error) {
 	id := uuid.New().String()
 
-	client, err := newNATSClient(hostConfig.NATSConfig, id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create NATS client: %w", err)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var messages []*schema.Message
@@ -75,7 +69,6 @@ func NewMCPHost(hostConfig *HostConfig) (MCPHost, error) {
 
 	return &mcpHost{
 		id:          id,
-		natsClient:  client,
 		config:      hostConfig,
 		ctx:         ctx,
 		cancel:      cancel,
@@ -158,8 +151,6 @@ func (h *mcpHost) GiveMessages() []*schema.Message {
 func (h *mcpHost) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-
-	h.natsClient.Close()
 
 	if h.cancel != nil {
 		h.cancel()
