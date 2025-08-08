@@ -143,6 +143,8 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 
 // runAgenticStep processes a single step of the agentic loop (handles tool calls)
 func (h *mcpHost) runAgenticStep(mcpAgent *agent.Agent, messages []*schema.Message) (*schema.Message, []*schema.Message, error) {
+	fmt.Println("DEBUG: Entrando en runAgenticStep")
+	defer fmt.Println("DEBUG: Saliendo de runAgenticStep")
 	result, err := mcpAgent.GenerateWithLoopAndStreaming(h.ctx, messages,
 		// Tool call handler - called when a tool is about to be executed
 		func(toolName, toolArgs string) {
