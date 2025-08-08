@@ -112,6 +112,7 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 			return nil
 		case prompt, ok := <-h.config.InputChan:
 			fmt.Printf("Received user input: %s\n", prompt)
+			fmt.Printf("h.config.Debug: %v\n", h.config.Debug)
 			if !ok {
 				return fmt.Errorf("input channel closed, stopping runInteractiveLoop")
 			}
@@ -121,6 +122,7 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 			h.mu.RUnlock()
 
 			// Process the user input with tool calls
+			fmt.Println("Processing user input with tool calls...")
 			message, conversationMessages, err := h.runAgenticStep(mcpAgent, tempMessages)
 			if err != nil {
 				fmt.Printf("Error processing user input: %v\n", err)
