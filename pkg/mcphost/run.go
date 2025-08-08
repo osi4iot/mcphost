@@ -117,10 +117,10 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 			}
 			fmt.Printf("Received user input: %s\n", prompt)
 			fmt.Printf("h.config.Debug: %v\n", h.config.Debug)
-			fmt.Println("Befor append")
 			h.mu.RLock()
-			tempMessages := append(*h.messages, schema.UserMessage(prompt))
+			base := append([]*schema.Message(nil), (*h.messages)...)
 			h.mu.RUnlock()
+			tempMessages := append(base, schema.UserMessage(prompt))
 
 			// Process the user input with tool calls
 			fmt.Println("Processing user input with tool calls...")
@@ -271,7 +271,6 @@ func (h *mcpHost) RunNatsSubscription(mcpAgent *agent.Agent) error {
 		return err
 	}
 }
-
 
 // runNatsAgenticStep processes a single step of the agentic loop (handles tool calls)
 func (h *mcpHost) runNatsAgenticStep(mcpAgent *agent.Agent, messages []*schema.Message) (*schema.Message, []*schema.Message, error) {
