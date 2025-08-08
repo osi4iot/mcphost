@@ -1,6 +1,7 @@
 package mcphost
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/cloudwego/eino/schema"
@@ -19,7 +20,7 @@ func (h *mcpHost) RunMCPHost() error {
 		MCPServers:     h.config.MCPServers,
 		Model:          h.config.Model,
 		MaxSteps:       h.config.MaxSteps,
-		Debug:          false,
+		Debug:          h.config.Debug,
 		Compact:        false,
 		SystemPrompt:   h.config.SystemPrompt,
 		ProviderAPIKey: h.config.ProviderAPIKey,
@@ -111,6 +112,7 @@ func (h *mcpHost) RunMCPHost() error {
 		if prompt == "" {
 			return // Skip empty prompts
 		}
+		fmt.Printf("Received user input: %s\n", prompt)
 
 		// Agregar el mensaje del usuario
 		tempMessages := append(messages, schema.UserMessage(prompt))
@@ -155,47 +157,57 @@ func (h *mcpHost) runAgenticStep(mcpAgent *agent.Agent, messages []*schema.Messa
 	result, err := mcpAgent.GenerateWithLoopAndStreaming(h.ctx, messages,
 		// Tool call handler - called when a tool is about to be executed
 		func(toolName, toolArgs string) {
-			fmt.Printf("Tool call: %s with args: %s\n", toolName, toolArgs)
+			if h.config.Debug {
+				fmt.Printf("Tool call: %s with args: %s\n", toolName, toolArgs)
+			}
 		},
 		// Tool execution handler - called when tool execution starts/ends
 		func(toolName string, isStarting bool) {
-			// if isStarting {
-			// 	fmt.Printf("Starting tool: %s\n", toolName)
-			// } else {
-			// 	fmt.Printf("Finished tool: %s\n", toolName)
-			// }
+			if h.config.Debug {
+				if isStarting {
+					fmt.Printf("Starting tool: %s\n", toolName)
+				} else {
+					fmt.Printf("Finished tool: %s\n", toolName)
+				}
+			}
 		},
 		// Tool result handler - called when a tool execution completes
 		func(toolName, toolArgs, result string, isError bool) {
-			// resultContent := result
+			resultContent := result
 
-			// // Try to parse as MCP content structure
-			// var mcpContent struct {
-			// 	Content []struct {
-			// 		Type string `json:"type"`
-			// 		Text string `json:"text"`
-			// 	} `json:"content"`
-			// }
+			// Try to parse as MCP content structure
+			var mcpContent struct {
+				Content []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"content"`
+			}
 
-			// // First try to unmarshal as-is
-			// if err := json.Unmarshal([]byte(result), &mcpContent); err == nil {
-			// 	// Extract text from MCP content structure
-			// 	if len(mcpContent.Content) > 0 && mcpContent.Content[0].Type == "text" {
-			// 		resultContent = mcpContent.Content[0].Text
-			// 	}
-			// } else {
-			// 	// If that fails, try unquoting first (in case it's double-encoded)
-			// 	var unquoted string
-			// 	if err := json.Unmarshal([]byte(result), &unquoted); err == nil {
-			// 		if err := json.Unmarshal([]byte(unquoted), &mcpContent); err == nil {
-			// 			if len(mcpContent.Content) > 0 && mcpContent.Content[0].Type == "text" {
-			// 				resultContent = mcpContent.Content[0].Text
-			// 			}
-			// 		}
-			// 	}
-			// }
+			// First try to unmarshal as-is
+			if err := json.Unmarshal([]byte(result), &mcpContent); err == nil {
+				// Extract text from MCP content structure
+				if len(mcpContent.Content) > 0 && mcpContent.Content[0].Type == "text" {
+					resultContent = mcpContent.Content[0].Text
+				}
+			} else {
+				// If that fails, try unquoting first (in case it's double-encoded)
+				var unquoted string
+				if err := json.Unmarshal([]byte(result), &unquoted); err == nil {
+					if err := json.Unmarshal([]byte(unquoted), &mcpContent); err == nil {
+						if len(mcpContent.Content) > 0 && mcpContent.Content[0].Type == "text" {
+							resultContent = mcpContent.Content[0].Text
+						}
+					}
+				}
+			}
 
-			// fmt.Printf("Tool result for %s: %s\n", toolName, resultContent)
+			if isError {
+				fmt.Printf("Tool error for %s: %s\n", toolName, resultContent)
+			}
+
+			if h.config.Debug {
+				fmt.Printf("Tool result for %s: %s\n", toolName, resultContent)
+			}
 		},
 		// Response handler - called when the LLM generates a response
 		func(content string) {
