@@ -111,6 +111,7 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 			fmt.Println("Context cancelled, stopping runInteractiveLoop")
 			return nil
 		case prompt, ok := <-h.config.InputChan:
+			fmt.Printf("Received user input: %s\n", prompt)
 			if !ok {
 				return fmt.Errorf("input channel closed, stopping runInteractiveLoop")
 			}
