@@ -111,13 +111,13 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 			fmt.Println("Context cancelled, stopping runInteractiveLoop")
 			return nil
 		case prompt, ok := <-h.config.InputChan:
-			fmt.Printf("Received user input: %s\n", prompt)
-			fmt.Printf("h.config.Debug: %v\n", h.config.Debug)
 			if !ok {
 				fmt.Println("Input channel closed, stopping runInteractiveLoop")
 				return fmt.Errorf("input channel closed, stopping runInteractiveLoop")
 			}
-
+			fmt.Printf("Received user input: %s\n", prompt)
+			fmt.Printf("h.config.Debug: %v\n", h.config.Debug)
+			fmt.Println("Befor append")
 			h.mu.RLock()
 			tempMessages := append(*h.messages, schema.UserMessage(prompt))
 			h.mu.RUnlock()
