@@ -108,38 +108,32 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 	for {
 		select {
 		case <-h.ctx.Done():
-			fmt.Println("Context cancelled, stopping runInteractiveLoop")
 			return nil
 		case prompt, ok := <-h.config.InputChan:
 			if !ok {
-				fmt.Println("Input channel closed, stopping runInteractiveLoop")
 				return fmt.Errorf("input channel closed, stopping runInteractiveLoop")
 			}
-			fmt.Printf("Received user input: %s\n", prompt)
-			fmt.Printf("h.config.Debug: %v\n", h.config.Debug)
+			h.mu.RLock()
 			tempMessages := append(*h.messages, schema.UserMessage(prompt))
+			h.mu.RUnlock()
 
 			// Process the user input with tool calls
-			fmt.Println("Processing user input with tool calls...")
 			message, conversationMessages, err := h.runAgenticStep(mcpAgent, tempMessages)
 			if err != nil {
 				fmt.Printf("Error processing user input: %v\n", err)
 			}
 
-			fmt.Printf("Final response: %v\n", message)
-			fmt.Printf("Conversation messages: %v\n", conversationMessages)
-
 			h.config.OutputChan <- message.Content
 
+			h.mu.Lock()
 			*h.messages = append(*h.messages, conversationMessages...)
+			h.mu.Unlock()
 		}
 	}
 }
 
 // runAgenticStep processes a single step of the agentic loop (handles tool calls)
 func (h *mcpHost) runAgenticStep(mcpAgent *agent.Agent, messages []*schema.Message) (*schema.Message, []*schema.Message, error) {
-	fmt.Println("DEBUG: Entrando en runAgenticStep")
-	defer fmt.Println("DEBUG: Saliendo de runAgenticStep")
 	result, err := mcpAgent.GenerateWithLoopAndStreaming(h.ctx, messages,
 		// Tool call handler - called when a tool is about to be executed
 		func(toolName, toolArgs string) {
@@ -197,7 +191,9 @@ func (h *mcpHost) runAgenticStep(mcpAgent *agent.Agent, messages []*schema.Messa
 		},
 		// Response handler - called when the LLM generates a response
 		func(content string) {
-			fmt.Printf("LLM response: %s\n", content)
+			if h.config.Debug {
+				fmt.Printf("LLM response: %s\n", content)
+			}
 		},
 		// Tool call content handler - called when content accompanies tool calls
 		func(content string) {},

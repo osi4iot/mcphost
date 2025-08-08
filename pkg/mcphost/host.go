@@ -75,20 +75,18 @@ func NewMCPHost(hostConfig *HostConfig) (MCPHost, error) {
 }
 
 func (h *mcpHost) Run() error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+    h.mu.Lock()
+    if h.initialized {
+        h.mu.Unlock()
+        return fmt.Errorf("host already initialized")
+    }
+    h.initialized = true
+    h.tokens = 0
+    h.lastUsed = time.Now()
+    h.mu.Unlock()
 
-	if h.initialized {
-		return fmt.Errorf("host already initialized")
-	}
-
-	h.initialized = true
-	h.tokens = 0
-	h.lastUsed = time.Now()
-
-	h.RunMCPHost()
-
-	return nil
+    // fuera del candado
+    return h.RunMCPHost()
 }
 
 func (h *mcpHost) ListTools() ([]string, error) {
