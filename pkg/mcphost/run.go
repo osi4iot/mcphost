@@ -101,7 +101,8 @@ func (h *mcpHost) RunMCPHost() error {
 	}
 	h.toolNames = toolNames
 
-	return h.runInteractiveLoop(mcpAgent)
+	go h.runInteractiveLoop(mcpAgent)
+	return nil
 }
 
 func (h *mcpHost) RunNatsSubscription(mcpAgent *agent.Agent) error {
