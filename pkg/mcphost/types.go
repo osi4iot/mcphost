@@ -23,7 +23,7 @@ type HostConfig struct {
 	TopK           *int32
 	SavedMessages  []*schema.Message
 	inputChan      chan string
-	outputChan     chan *schema.Message
+	outputChan     chan string
 }
 
 type AgenticLoopConfig struct {
