@@ -193,6 +193,64 @@ func (r *MessageRenderer) RenderSystemMessage(content string, timestamp time.Tim
 	}
 }
 
+// RenderDebugMessage renders debug messages with tool response block styling
+func (r *MessageRenderer) RenderDebugMessage(message string, timestamp time.Time) UIMessage {
+	baseStyle := lipgloss.NewStyle()
+
+	// Create the main message style with border using tool color
+	theme := getTheme()
+	style := baseStyle.
+		Width(r.width - 3). // Account for left margin
+		BorderLeft(true).
+		Foreground(theme.Muted).
+		BorderForeground(theme.Tool).
+		BorderStyle(lipgloss.ThickBorder()).
+		PaddingLeft(1).
+		MarginLeft(2).  // Add left margin like other messages
+		MarginBottom(1) // Add bottom margin
+
+	// Format timestamp
+	timeStr := timestamp.Local().Format("02 Jan 2006 03:04 PM")
+
+	// Create header with debug icon
+	header := baseStyle.
+		Foreground(theme.Tool).
+		Bold(true).
+		Render("🔍 Debug Output")
+
+	// Process and format the message content
+	// Split into lines and format each one
+	lines := strings.Split(message, "\n")
+	var formattedLines []string
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			formattedLines = append(formattedLines, "  "+line)
+		}
+	}
+
+	content := baseStyle.
+		Foreground(theme.Muted).
+		Render(strings.Join(formattedLines, "\n"))
+
+	// Create info line
+	info := baseStyle.
+		Width(r.width - 5). // Account for margins and padding
+		Foreground(theme.Muted).
+		Render(fmt.Sprintf(" MCPHost (%s)", timeStr))
+
+	// Combine all parts
+	fullContent := lipgloss.JoinVertical(lipgloss.Left,
+		header,
+		content,
+		info,
+	)
+
+	return UIMessage{
+		Content: style.Render(fullContent),
+		Height:  lipgloss.Height(style.Render(fullContent)),
+	}
+}
+
 // RenderDebugConfigMessage renders debug configuration settings with tool response block styling
 func (r *MessageRenderer) RenderDebugConfigMessage(config map[string]any, timestamp time.Time) UIMessage {
 	baseStyle := lipgloss.NewStyle()

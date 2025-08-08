@@ -18,6 +18,7 @@ import (
 	"github.com/mark3labs/mcphost/internal/models"
 	"github.com/mark3labs/mcphost/internal/session"
 	"github.com/mark3labs/mcphost/internal/tokens"
+	"github.com/mark3labs/mcphost/internal/tools"
 	"github.com/mark3labs/mcphost/internal/ui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -386,8 +387,15 @@ func runNormalMode(ctx context.Context) error {
 	}
 
 	// Create the agent using the factory
-	mcpAgent, err := agent.CreateAgent(ctx, &agent.AgentCreationOptions{
-		ModelConfig:      modelConfig,
+	// Use a buffered debug logger to capture messages during initialization
+	var bufferedLogger *tools.BufferedDebugLogger
+	var debugLogger tools.DebugLogger
+	if viper.GetBool("debug") {
+		bufferedLogger = tools.NewBufferedDebugLogger(true)
+		debugLogger = bufferedLogger
+	}
+
+	mcpAgent, err := agent.CreateAgent(ctx, &agent.AgentCreationOptions{ModelConfig: modelConfig,
 		MCPConfig:        mcpConfig,
 		SystemPrompt:     systemPrompt,
 		MaxSteps:         viper.GetInt("max-steps"),
@@ -395,6 +403,7 @@ func runNormalMode(ctx context.Context) error {
 		ShowSpinner:      true,
 		Quiet:            quietFlag,
 		SpinnerFunc:      spinnerFunc,
+		DebugLogger:      debugLogger,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create agent: %v", err)
@@ -439,6 +448,16 @@ func runNormalMode(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to setup CLI: %v", err)
+	}
+
+	// Display buffered debug messages if any
+	if bufferedLogger != nil && cli != nil {
+		messages := bufferedLogger.GetMessages()
+		if len(messages) > 0 {
+			// Combine all messages into a single debug output
+			combinedMessage := strings.Join(messages, "\n  ")
+			cli.DisplayDebugMessage(combinedMessage)
+		}
 	}
 
 	// Display debug configuration if debug mode is enabled

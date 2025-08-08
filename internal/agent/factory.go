@@ -7,6 +7,7 @@ import (
 
 	"github.com/mark3labs/mcphost/internal/config"
 	"github.com/mark3labs/mcphost/internal/models"
+	"github.com/mark3labs/mcphost/internal/tools"
 )
 
 // SpinnerFunc is a function type for showing spinners during agent creation
@@ -19,9 +20,10 @@ type AgentCreationOptions struct {
 	SystemPrompt     string
 	MaxSteps         int
 	StreamingEnabled bool
-	ShowSpinner      bool        // For Ollama models
-	Quiet            bool        // Skip spinner if quiet
-	SpinnerFunc      SpinnerFunc // Function to show spinner (provided by caller)
+	ShowSpinner      bool              // For Ollama models
+	Quiet            bool              // Skip spinner if quiet
+	SpinnerFunc      SpinnerFunc       // Function to show spinner (provided by caller)
+	DebugLogger      tools.DebugLogger // Optional debug logger
 }
 
 // CreateAgent creates an agent with optional spinner for Ollama models
@@ -32,6 +34,7 @@ func CreateAgent(ctx context.Context, opts *AgentCreationOptions) (*Agent, error
 		SystemPrompt:     opts.SystemPrompt,
 		MaxSteps:         opts.MaxSteps,
 		StreamingEnabled: opts.StreamingEnabled,
+		DebugLogger:      opts.DebugLogger,
 	}
 
 	var agent *Agent
