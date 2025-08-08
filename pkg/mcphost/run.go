@@ -101,61 +101,7 @@ func (h *mcpHost) RunMCPHost() error {
 	}
 	h.toolNames = toolNames
 
-	go h.runInteractiveLoop(mcpAgent)
-	return nil
-}
-
-func (h *mcpHost) RunNatsSubscription(mcpAgent *agent.Agent) error {
-	// Main interaction logic
-	errChan := make(chan error, 1)
-
-	subjectIn := ""
-	sub, err := h.config.NatsClient.Subscribe(subjectIn, func(m *nats.Msg) {
-		// Get user input
-		prompt := string(m.Data)
-		if prompt == "" {
-			return // Skip empty prompts
-		}
-		fmt.Printf("Received user input: %s\n", prompt)
-
-		// Agregar el mensaje del usuario
-		h.mu.RLock()
-		tempMessages := append(*h.messages, schema.UserMessage(prompt))
-		h.mu.RUnlock()
-
-		// Process the user input with tool calls
-		_, conversationMessages, err := h.runNatsAgenticStep(mcpAgent, tempMessages)
-		if err != nil {
-			fmt.Printf("Error processing user input: %v\n", err)
-			select {
-			case errChan <- err:
-			default:
-			}
-			return
-		}
-
-		h.mu.Lock()
-		*h.messages = append(*h.messages, conversationMessages...)
-		h.mu.Unlock()
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to NATS subject: %v", err)
-	}
-
-	fmt.Printf("Subscribed to NATS subject: %s\n", subjectIn)
-
-	// **PUNTO CLAVE**: Esperar hasta que el contexto se cancele
-	select {
-	case <-h.ctx.Done():
-		fmt.Println("Context cancelled, unsubscribing...")
-		sub.Unsubscribe()
-		return h.ctx.Err()
-	case err := <-errChan:
-		fmt.Printf("Critical error received: %v\n", err)
-		sub.Unsubscribe()
-		return err
-	}
+	return h.runInteractiveLoop(mcpAgent)
 }
 
 func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
@@ -265,6 +211,60 @@ func (h *mcpHost) runAgenticStep(mcpAgent *agent.Agent, messages []*schema.Messa
 	// Return the final response and all conversation messages
 	return response, conversationMessages, nil
 }
+
+func (h *mcpHost) RunNatsSubscription(mcpAgent *agent.Agent) error {
+	// Main interaction logic
+	errChan := make(chan error, 1)
+
+	subjectIn := ""
+	sub, err := h.config.NatsClient.Subscribe(subjectIn, func(m *nats.Msg) {
+		// Get user input
+		prompt := string(m.Data)
+		if prompt == "" {
+			return // Skip empty prompts
+		}
+		fmt.Printf("Received user input: %s\n", prompt)
+
+		// Agregar el mensaje del usuario
+		h.mu.RLock()
+		tempMessages := append(*h.messages, schema.UserMessage(prompt))
+		h.mu.RUnlock()
+
+		// Process the user input with tool calls
+		_, conversationMessages, err := h.runNatsAgenticStep(mcpAgent, tempMessages)
+		if err != nil {
+			fmt.Printf("Error processing user input: %v\n", err)
+			select {
+			case errChan <- err:
+			default:
+			}
+			return
+		}
+
+		h.mu.Lock()
+		*h.messages = append(*h.messages, conversationMessages...)
+		h.mu.Unlock()
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to NATS subject: %v", err)
+	}
+
+	fmt.Printf("Subscribed to NATS subject: %s\n", subjectIn)
+
+	// **PUNTO CLAVE**: Esperar hasta que el contexto se cancele
+	select {
+	case <-h.ctx.Done():
+		fmt.Println("Context cancelled, unsubscribing...")
+		sub.Unsubscribe()
+		return h.ctx.Err()
+	case err := <-errChan:
+		fmt.Printf("Critical error received: %v\n", err)
+		sub.Unsubscribe()
+		return err
+	}
+}
+
 
 // runNatsAgenticStep processes a single step of the agentic loop (handles tool calls)
 func (h *mcpHost) runNatsAgenticStep(mcpAgent *agent.Agent, messages []*schema.Message) (*schema.Message, []*schema.Message, error) {
