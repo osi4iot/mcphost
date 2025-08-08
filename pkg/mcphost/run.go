@@ -110,7 +110,7 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 		case <-h.ctx.Done():
 			fmt.Println("Context cancelled, stopping runInteractiveLoop")
 			return nil
-		case prompt, ok := <-h.config.inputChan:
+		case prompt, ok := <-h.config.InputChan:
 			if !ok {
 				return fmt.Errorf("input channel closed, stopping runInteractiveLoop")
 			}
@@ -125,7 +125,7 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 				fmt.Printf("Error processing user input: %v\n", err)
 			}
 
-			h.config.outputChan <- message.Content
+			h.config.OutputChan <- message.Content
 
 			h.mu.Lock()
 			*h.messages = append(*h.messages, conversationMessages...)
