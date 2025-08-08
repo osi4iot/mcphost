@@ -117,10 +117,7 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 			}
 			fmt.Printf("Received user input: %s\n", prompt)
 			fmt.Printf("h.config.Debug: %v\n", h.config.Debug)
-			h.mu.RLock()
-			base := append([]*schema.Message(nil), (*h.messages)...)
-			h.mu.RUnlock()
-			tempMessages := append(base, schema.UserMessage(prompt))
+			tempMessages := append(*h.messages, schema.UserMessage(prompt))
 
 			// Process the user input with tool calls
 			fmt.Println("Processing user input with tool calls...")
@@ -134,9 +131,7 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 
 			h.config.OutputChan <- message.Content
 
-			h.mu.Lock()
 			*h.messages = append(*h.messages, conversationMessages...)
-			h.mu.Unlock()
 		}
 	}
 }
