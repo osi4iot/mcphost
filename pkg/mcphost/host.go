@@ -13,20 +13,16 @@ import (
 type MCPHost interface {
 	Run() error
 
-	// Listar herramientas disponibles
 	ListTools() ([]string, error)
 
     ListServers() ([]string, error)
 
-	// Obtener información del host
 	GetInfo() (*HostInfo, error)
 
 	GiveMessages() []*schema.Message
 
-	// Cerrar el host y limpiar recursos
 	Close()
 
-	// Obtener el ID único de esta instancia
 	ID() string
 }
 
