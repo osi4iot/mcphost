@@ -27,7 +27,8 @@ type ConnectionPoolConfig struct {
 // DefaultConnectionPoolConfig returns default configuration
 func DefaultConnectionPoolConfig() *ConnectionPoolConfig {
 	return &ConnectionPoolConfig{
-		MaxIdleTime:         5 * time.Minute,
+		// MaxIdleTime:         5 * time.Minute,
+		MaxIdleTime:         87600 * time.Hour,
 		MaxRetries:          3,
 		HealthCheckInterval: 30 * time.Second,
 		MaxErrorCount:       3,
