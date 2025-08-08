@@ -125,6 +125,9 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 				fmt.Printf("Error processing user input: %v\n", err)
 			}
 
+			fmt.Printf("Final response: %v\n", message)
+			fmt.Printf("Conversation messages: %v\n", conversationMessages)
+
 			h.config.OutputChan <- message.Content
 
 			h.mu.Lock()
