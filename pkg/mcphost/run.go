@@ -114,6 +114,7 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 			fmt.Printf("Received user input: %s\n", prompt)
 			fmt.Printf("h.config.Debug: %v\n", h.config.Debug)
 			if !ok {
+				fmt.Println("Input channel closed, stopping runInteractiveLoop")
 				return fmt.Errorf("input channel closed, stopping runInteractiveLoop")
 			}
 
