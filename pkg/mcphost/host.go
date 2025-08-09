@@ -150,7 +150,9 @@ func (h *mcpHost) Close() {
 
 	if h.cancel != nil {
 		h.cancel()
-		h.mcpAgent.Close()
+		if h.mcpAgent != nil {
+			h.mcpAgent.Close()
+		}
 	}
 
 	h.initialized = false
