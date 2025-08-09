@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
+	"github.com/osi4iot/mcphost/internal/agent"
 )
 
 type MCPHost interface {
@@ -48,6 +49,7 @@ type mcpHost struct {
 	cancel      context.CancelFunc
 	messages    *[]*schema.Message
 	mu          sync.RWMutex
+	mcpAgent     *agent.Agent
 }
 
 // NewMCPHost crea una nueva instancia de MCPHost
@@ -148,6 +150,7 @@ func (h *mcpHost) Close() {
 
 	if h.cancel != nil {
 		h.cancel()
+		h.mcpAgent.Close()
 	}
 
 	h.initialized = false

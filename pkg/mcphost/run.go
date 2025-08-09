@@ -70,7 +70,7 @@ func (h *mcpHost) RunMCPHost() error {
 	}
 
 	// Create the agent using the factory
-	mcpAgent, err := agent.CreateAgent(h.ctx, &agent.AgentCreationOptions{
+	h.mcpAgent, err = agent.CreateAgent(h.ctx, &agent.AgentCreationOptions{
 		ModelConfig:      modelConfig,
 		MCPConfig:        mcpConfig,
 		SystemPrompt:     systemPrompt,
@@ -83,7 +83,6 @@ func (h *mcpHost) RunMCPHost() error {
 	if err != nil {
 		return fmt.Errorf("failed to create agent: %v", err)
 	}
-	defer mcpAgent.Close()
 
 	// Prepare data for slash commands
 	var serverNames []string
@@ -92,7 +91,7 @@ func (h *mcpHost) RunMCPHost() error {
 	}
 	h.serverNames = serverNames
 
-	tools := mcpAgent.GetTools()
+	tools := h.mcpAgent.GetTools()
 	var toolNames []string
 	for _, tool := range tools {
 		if info, err := tool.Info(h.ctx); err == nil {
@@ -101,7 +100,7 @@ func (h *mcpHost) RunMCPHost() error {
 	}
 	h.toolNames = toolNames
 
-	return h.runInteractiveLoop(mcpAgent)
+	return h.runInteractiveLoop(h.mcpAgent)
 }
 
 func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
