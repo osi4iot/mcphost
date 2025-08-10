@@ -20,8 +20,6 @@ type MCPHost interface {
 
 	GetInfo() (*HostInfo, error)
 
-	GiveMessages() []*schema.Message
-
 	Close()
 
 	ID() string
@@ -47,23 +45,17 @@ type mcpHost struct {
 	lastUsed    time.Time
 	ctx         context.Context
 	cancel      context.CancelFunc
-	messages    *[]*schema.Message
 	mu          sync.RWMutex
 	mcpAgent     *agent.Agent
+	getMessages   func(string) []*schema.Message
+	saveMessages   func(string, []*schema.Message) error
 }
 
 // NewMCPHost crea una nueva instancia de MCPHost
-func NewMCPHost(hostConfig *HostConfig) (MCPHost, error) {
+func NewMCPHost(hostConfig *HostConfig, getMessages func(string) []*schema.Message, saveMessages func(string, []*schema.Message) error) (MCPHost, error) {
 	id := uuid.New().String()
 
 	ctx, cancel := context.WithCancel(context.Background())
-
-	var messages []*schema.Message
-	if hostConfig.SavedMessages != nil {
-		messages = hostConfig.SavedMessages
-	} else {
-		messages = []*schema.Message{}
-	}
 
 	return &mcpHost{
 		id:          id,
@@ -72,7 +64,8 @@ func NewMCPHost(hostConfig *HostConfig) (MCPHost, error) {
 		cancel:      cancel,
 		initialized: false,
 		tokens:      0,
-		messages:    &messages,
+		getMessages: getMessages,
+		saveMessages: saveMessages,
 	}, nil
 }
 
@@ -135,13 +128,6 @@ func (h *mcpHost) GetInfo() (*HostInfo, error) {
 		LastUsed:   h.lastUsed,
 		Tokens:     h.tokens,
 	}, nil
-}
-
-func (h *mcpHost) GiveMessages() []*schema.Message {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	return *h.messages
 }
 
 func (h *mcpHost) Close() {

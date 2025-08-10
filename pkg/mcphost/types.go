@@ -22,7 +22,7 @@ type HostConfig struct {
 	TopP           *float32
 	TopK           *int32
 	SavedMessages  []*schema.Message
-	InputChan      chan string
+	InputChan      chan ChatMessage
 	OutputChan     chan string
 }
 
@@ -40,4 +40,9 @@ type AgenticLoopConfig struct {
 	ToolNames   []string       // for slash commands
 	ModelName   string         // for display
 	MCPConfig   *config.Config // for continuing to interactive mode
+}
+
+type ChatMessage struct {
+	UserName string `json:"user_name"`
+	Prompt   string `json:"prompt"`
 }
