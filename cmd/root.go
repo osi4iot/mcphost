@@ -118,12 +118,10 @@ Examples:
 	},
 }
 
-func Execute(v string) {
+// GetRootCommand returns the root command with the version set
+func GetRootCommand(v string) *cobra.Command {
 	rootCmd.Version = v
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	return rootCmd
 }
 
 func initConfig() {
