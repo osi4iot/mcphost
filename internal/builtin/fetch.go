@@ -188,8 +188,10 @@ func executeFetch(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 	// Create result with metadata
 	title := fmt.Sprintf("%s (%s)", urlStr, contentType)
 	result := mcp.NewToolResultText(output)
-	result.Meta = map[string]any{
-		"title": title,
+	result.Meta = &mcp.Meta{
+		AdditionalFields: map[string]any{
+			"title": title,
+		},
 	}
 
 	return result, nil

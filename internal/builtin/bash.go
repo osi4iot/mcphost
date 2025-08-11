@@ -144,14 +144,15 @@ func executeBash(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToo
 
 	// Create result with metadata
 	toolResult := mcp.NewToolResultText(result)
-	toolResult.Meta = map[string]any{
-		"stderr":      stderr,
-		"stdout":      stdout,
-		"exit":        exitCode,
-		"description": description,
-		"title":       command,
+	toolResult.Meta = &mcp.Meta{
+		AdditionalFields: map[string]any{
+			"stderr":      stderr,
+			"stdout":      stdout,
+			"exit":        exitCode,
+			"description": description,
+			"title":       command,
+		},
 	}
-
 	return toolResult, nil
 }
 

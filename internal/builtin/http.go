@@ -240,11 +240,13 @@ func executeHTTPFetch(ctx context.Context, request mcp.CallToolRequest) (*mcp.Ca
 	// Create result with metadata
 	title := fmt.Sprintf("%s (%s)", urlStr, contentType)
 	result := mcp.NewToolResultText(output)
-	result.Meta = map[string]any{
-		"title":       title,
-		"url":         urlStr,
-		"contentType": contentType,
-		"bodyOnly":    bodyOnly,
+	result.Meta = &mcp.Meta{
+		AdditionalFields: map[string]any{
+			"title":       title,
+			"url":         urlStr,
+			"contentType": contentType,
+			"bodyOnly":    bodyOnly,
+		},
 	}
 
 	return result, nil
@@ -622,12 +624,14 @@ func executeHTTPFetchFilteredJSON(ctx context.Context, request mcp.CallToolReque
 
 	title := fmt.Sprintf("Filtered JSON from %s (path: %s)", urlStr, path)
 	mcpResult := mcp.NewToolResultText(filteredJSON)
-	mcpResult.Meta = map[string]any{
-		"title":       title,
-		"url":         urlStr,
-		"contentType": contentType,
-		"gjsonPath":   path,
-		"resultType":  result.Type.String(),
+	mcpResult.Meta = &mcp.Meta{
+		AdditionalFields: map[string]any{
+			"title":       title,
+			"url":         urlStr,
+			"contentType": contentType,
+			"gjsonPath":   path,
+			"resultType":  result.Type.String(),
+		},
 	}
 
 	return mcpResult, nil

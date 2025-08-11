@@ -280,7 +280,7 @@ func TestTodoActiveCounting(t *testing.T) {
 		t.Fatal("Expected metadata to be non-nil")
 	}
 
-	metaTodos, ok := result.Meta["todos"].([]TodoInfo)
+	metaTodos, ok := result.Meta.AdditionalFields["todos"].([]TodoInfo)
 	if !ok {
 		t.Fatal("Expected todos in metadata")
 	}
