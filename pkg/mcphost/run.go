@@ -116,7 +116,7 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 			tempMessages := append(previousMessages, schema.UserMessage(chatMessage.Prompt))
 
 			// Process the user input with tool calls
-			message, conversationMessages, err := h.runAgenticStep(mcpAgent, tempMessages)
+			message, _, err := h.runAgenticStep(mcpAgent, tempMessages)
 			if err != nil {
 				fmt.Printf("Error processing user input: %v\n", err)
 				llmResponse := LlmResponse{
@@ -130,7 +130,7 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 					Message: message.Content,
 				}
 				h.config.OutputChan <- llmResponse
-				messages := append(tempMessages, conversationMessages...)
+				messages := append(tempMessages, message)
 				err = h.saveMessages(chatMessage.UserName, messages)
 				if err != nil {
 					fmt.Printf("Error saving messages for user %s: %v\n", chatMessage.UserName, err)
