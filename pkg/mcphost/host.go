@@ -16,7 +16,7 @@ type MCPHost interface {
 
 	ListTools() ([]string, error)
 
-    ListServers() ([]string, error)
+	ListServers() ([]string, error)
 
 	GetInfo() (*HostInfo, error)
 
@@ -36,52 +36,56 @@ type HostInfo struct {
 }
 
 type mcpHost struct {
-	id          string
-	config      *HostConfig
-	initialized bool
-	serverNames []string
-	toolNames   []string
-	tokens      int
-	lastUsed    time.Time
-	ctx         context.Context
-	cancel      context.CancelFunc
-	mu          sync.RWMutex
+	id           string
+	config       *HostConfig
+	initialized  bool
+	serverNames  []string
+	toolNames    []string
+	tokens       int
+	lastUsed     time.Time
+	ctx          context.Context
+	cancel       context.CancelFunc
+	mu           sync.RWMutex
 	mcpAgent     *agent.Agent
-	getMessages   func(string) []*schema.Message
-	saveMessages   func(string, []*schema.Message) error
+	getMessages  func(string) []*schema.Message
+	saveMessages func(string, []*schema.Message) error
 }
 
 // NewMCPHost crea una nueva instancia de MCPHost
-func NewMCPHost(hostConfig *HostConfig, getMessages func(string) []*schema.Message, saveMessages func(string, []*schema.Message) error) (MCPHost, error) {
+func NewMCPHost(
+	hostConfig *HostConfig,
+	getMessages func(string) []*schema.Message,
+	saveMessages func(string, []*schema.Message) error,
+) (MCPHost, error) {
 	id := uuid.New().String()
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &mcpHost{
-		id:          id,
-		config:      hostConfig,
-		ctx:         ctx,
-		cancel:      cancel,
-		initialized: false,
-		tokens:      0,
-		getMessages: getMessages,
+		id:           id,
+		config:       hostConfig,
+		ctx:          ctx,
+		cancel:       cancel,
+		initialized:  false,
+		tokens:       0,
+		getMessages:  getMessages,
 		saveMessages: saveMessages,
 	}, nil
 }
 
 func (h *mcpHost) Run() error {
-    h.mu.Lock()
-    if h.initialized {
-        h.mu.Unlock()
-        return fmt.Errorf("host already initialized")
-    }
-    h.initialized = true
-    h.tokens = 0
-    h.lastUsed = time.Now()
-    h.mu.Unlock()
+	h.mu.Lock()
+	if h.initialized {
+		h.mu.Unlock()
+		return fmt.Errorf("host already initialized")
+	}
+	h.initialized = true
+	h.tokens = 0
+	h.lastUsed = time.Now()
+	h.mu.Unlock()
 
-    // fuera del candado
-    return h.RunMCPHost()
+	// fuera del candado
+	return h.RunMCPHost()
 }
 
 func (h *mcpHost) ListTools() ([]string, error) {
@@ -96,14 +100,14 @@ func (h *mcpHost) ListTools() ([]string, error) {
 }
 
 func (h *mcpHost) ListServers() ([]string, error) {
-    h.mu.RLock()
-    defer h.mu.RUnlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
-    if !h.initialized {
-        return nil, fmt.Errorf("host not initialized")
-    }
+	if !h.initialized {
+		return nil, fmt.Errorf("host not initialized")
+	}
 
-    return h.serverNames, nil
+	return h.serverNames, nil
 }
 
 func (h *mcpHost) GetInfo() (*HostInfo, error) {

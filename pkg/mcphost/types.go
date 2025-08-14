@@ -23,7 +23,7 @@ type HostConfig struct {
 	TopK           *int32
 	SavedMessages  []*schema.Message
 	InputChan      chan ChatMessage
-	OutputChan     chan string
+	OutputChan     chan LlmResponse
 }
 
 type AgenticLoopConfig struct {
@@ -45,4 +45,9 @@ type AgenticLoopConfig struct {
 type ChatMessage struct {
 	UserName string `json:"user_name"`
 	Prompt   string `json:"prompt"`
+}
+
+type LlmResponse struct {
+	Status string
+	Message string
 }
