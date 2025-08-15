@@ -201,6 +201,28 @@ func (r *CompactRenderer) RenderErrorMessage(errorMsg string, timestamp time.Tim
 	}
 }
 
+// RenderDebugMessage renders debug messages in compact format
+func (r *CompactRenderer) RenderDebugMessage(message string, timestamp time.Time) UIMessage {
+	theme := getTheme()
+	symbol := lipgloss.NewStyle().Foreground(theme.Tool).Render("*")
+	label := lipgloss.NewStyle().Foreground(theme.Tool).Bold(true).Render("Debug")
+
+	// Truncate message if too long
+	content := message
+	if len(content) > r.width-20 {
+		content = content[:r.width-23] + "..."
+	}
+
+	line := fmt.Sprintf("%s  %-8s %s", symbol, label, content)
+
+	return UIMessage{
+		Type:      SystemMessage,
+		Content:   line,
+		Height:    1,
+		Timestamp: timestamp,
+	}
+}
+
 // RenderDebugConfigMessage renders debug config in compact format
 func (r *CompactRenderer) RenderDebugConfigMessage(config map[string]any, timestamp time.Time) UIMessage {
 	theme := getTheme()

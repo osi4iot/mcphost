@@ -23,6 +23,7 @@ type AgentConfig struct {
 	SystemPrompt     string
 	MaxSteps         int
 	StreamingEnabled bool
+	DebugLogger      tools.DebugLogger // Optional debug logger
 }
 
 // ToolCallHandler is a function type for handling tool calls as they happen
@@ -67,6 +68,11 @@ func NewAgent(ctx context.Context, config *AgentConfig) (*Agent, error) {
 
 	// Set the model for sampling support
 	toolManager.SetModel(providerResult.Model)
+
+	// Set the debug logger if provided
+	if config.DebugLogger != nil {
+		toolManager.SetDebugLogger(config.DebugLogger)
+	}
 
 	if err := toolManager.LoadTools(ctx, config.MCPConfig); err != nil {
 		return nil, fmt.Errorf("failed to load MCP tools: %v", err)

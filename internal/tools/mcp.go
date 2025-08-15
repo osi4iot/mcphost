@@ -26,6 +26,8 @@ type MCPToolManager struct {
 	toolMap        map[string]*toolMapping    // maps prefixed tool names to their server and original name
 	model          model.ToolCallingChatModel // LLM model for sampling
 	config         *config.Config
+	debug          bool
+	debugLogger    DebugLogger
 }
 
 // toolMapping stores the mapping between prefixed tool names and their original details
@@ -53,6 +55,14 @@ func NewMCPToolManager() *MCPToolManager {
 // SetModel sets the LLM model for sampling support
 func (m *MCPToolManager) SetModel(model model.ToolCallingChatModel) {
 	m.model = model
+}
+
+// SetDebugLogger sets the debug logger
+func (m *MCPToolManager) SetDebugLogger(logger DebugLogger) {
+	m.debugLogger = logger
+	if m.connectionPool != nil {
+		m.connectionPool.SetDebugLogger(logger)
+	}
 }
 
 // samplingHandler implements the MCP sampling handler interface
@@ -120,7 +130,12 @@ func (h *samplingHandler) CreateMessage(ctx context.Context, request mcp.CreateM
 func (m *MCPToolManager) LoadTools(ctx context.Context, config *config.Config) error {
 	// Initialize connection pool
 	m.config = config
-	m.connectionPool = NewMCPConnectionPool(DefaultConnectionPoolConfig(), m.model)
+	m.debug = config.Debug
+	if m.debugLogger == nil {
+		m.debugLogger = NewSimpleDebugLogger(config.Debug)
+	}
+	m.connectionPool = NewMCPConnectionPool(DefaultConnectionPoolConfig(), m.model, config.Debug)
+	m.connectionPool.SetDebugLogger(m.debugLogger)
 
 	var loadErrors []string
 
@@ -143,7 +158,7 @@ func (m *MCPToolManager) LoadTools(ctx context.Context, config *config.Config) e
 // loadServerTools loads tools from a single MCP server
 func (m *MCPToolManager) loadServerTools(ctx context.Context, serverName string, serverConfig config.MCPServerConfig) error {
 	// Add debug logging
-	debugLogConnectionInfo(serverName, serverConfig)
+	m.debugLogConnectionInfo(serverName, serverConfig)
 
 	// Get connection from pool
 	conn, err := m.connectionPool.GetConnection(ctx, serverName, serverConfig)
@@ -485,22 +500,26 @@ func (m *MCPToolManager) createBuiltinClient(ctx context.Context, serverName str
 }
 
 // debugLogConnectionInfo logs detailed connection information for debugging
-func debugLogConnectionInfo(serverName string, serverConfig config.MCPServerConfig) {
-	fmt.Printf("🔍 [DEBUG] Connecting to MCP server: %s\n", serverName)
-	fmt.Printf("🔍 [DEBUG] Transport type: %s\n", serverConfig.GetTransportType())
+func (m *MCPToolManager) debugLogConnectionInfo(serverName string, serverConfig config.MCPServerConfig) {
+	if m.debugLogger == nil || !m.debugLogger.IsDebugEnabled() {
+		return
+	}
+
+	m.debugLogger.LogDebug(fmt.Sprintf("[DEBUG] Connecting to MCP server: %s", serverName))
+	m.debugLogger.LogDebug(fmt.Sprintf("[DEBUG] Transport type: %s", serverConfig.GetTransportType()))
 
 	switch serverConfig.GetTransportType() {
 	case "stdio":
 		if len(serverConfig.Command) > 0 {
-			fmt.Printf("🔍 [DEBUG] Command: %s %v\n", serverConfig.Command[0], serverConfig.Command[1:])
+			m.debugLogger.LogDebug(fmt.Sprintf("[DEBUG] Command: %s %v", serverConfig.Command[0], serverConfig.Command[1:]))
 		}
 		if len(serverConfig.Environment) > 0 {
-			fmt.Printf("🔍 [DEBUG] Environment variables: %d\n", len(serverConfig.Environment))
+			m.debugLogger.LogDebug(fmt.Sprintf("[DEBUG] Environment variables: %d", len(serverConfig.Environment)))
 		}
 	case "sse", "streamable":
-		fmt.Printf("🔍 [DEBUG] URL: %s\n", serverConfig.URL)
+		m.debugLogger.LogDebug(fmt.Sprintf("[DEBUG] URL: %s", serverConfig.URL))
 		if len(serverConfig.Headers) > 0 {
-			fmt.Printf("🔍 [DEBUG] Headers: %v\n", serverConfig.Headers)
+			m.debugLogger.LogDebug(fmt.Sprintf("[DEBUG] Headers: %v", serverConfig.Headers))
 		}
 	}
 }

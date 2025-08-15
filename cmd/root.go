@@ -12,13 +12,16 @@ import (
 	"time"
 
 	"github.com/cloudwego/eino/schema"
+
 	"github.com/osi4iot/mcphost/internal/agent"
 	"github.com/osi4iot/mcphost/internal/config"
 	"github.com/osi4iot/mcphost/internal/hooks"
 	"github.com/osi4iot/mcphost/internal/models"
 	"github.com/osi4iot/mcphost/internal/session"
 	"github.com/osi4iot/mcphost/internal/tokens"
+	"github.com/osi4iot/mcphost/internal/tools"
 	"github.com/osi4iot/mcphost/internal/ui"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -41,6 +44,7 @@ var (
 	// Session management
 	saveSessionPath string
 	loadSessionPath string
+	sessionPath     string
 
 	// Model generation parameters
 	maxTokens     int
@@ -109,6 +113,7 @@ Examples:
   mcphost --save-session ./my-session.json -p "Hello"
   mcphost --load-session ./my-session.json -p "Continue our conversation"
   mcphost --load-session ./session.json --save-session ./session.json -p "Next message"
+  mcphost --session ./session.json -p "Next message"
   
   # Script mode
   mcphost script myscript.sh`,
@@ -117,12 +122,10 @@ Examples:
 	},
 }
 
-func Execute(v string) {
+// GetRootCommand returns the root command with the version set
+func GetRootCommand(v string) *cobra.Command {
 	rootCmd.Version = v
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	return rootCmd
 }
 
 func initConfig() {
@@ -259,6 +262,8 @@ func init() {
 		StringVar(&saveSessionPath, "save-session", "", "save session to file after each message")
 	rootCmd.PersistentFlags().
 		StringVar(&loadSessionPath, "load-session", "", "load session from file at startup")
+	rootCmd.PersistentFlags().
+		StringVarP(&sessionPath, "session", "s", "", "session file to load and update")
 
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&providerURL, "provider-url", "", "base URL for the provider API (applies to OpenAI, Anthropic, Ollama, and Google)")
@@ -386,8 +391,15 @@ func runNormalMode(ctx context.Context) error {
 	}
 
 	// Create the agent using the factory
-	mcpAgent, err := agent.CreateAgent(ctx, &agent.AgentCreationOptions{
-		ModelConfig:      modelConfig,
+	// Use a buffered debug logger to capture messages during initialization
+	var bufferedLogger *tools.BufferedDebugLogger
+	var debugLogger tools.DebugLogger
+	if viper.GetBool("debug") {
+		bufferedLogger = tools.NewBufferedDebugLogger(true)
+		debugLogger = bufferedLogger
+	}
+
+	mcpAgent, err := agent.CreateAgent(ctx, &agent.AgentCreationOptions{ModelConfig: modelConfig,
 		MCPConfig:        mcpConfig,
 		SystemPrompt:     systemPrompt,
 		MaxSteps:         viper.GetInt("max-steps"),
@@ -395,6 +407,7 @@ func runNormalMode(ctx context.Context) error {
 		ShowSpinner:      true,
 		Quiet:            quietFlag,
 		SpinnerFunc:      spinnerFunc,
+		DebugLogger:      debugLogger,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create agent: %v", err)
@@ -439,6 +452,16 @@ func runNormalMode(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to setup CLI: %v", err)
+	}
+
+	// Display buffered debug messages if any
+	if bufferedLogger != nil && cli != nil {
+		messages := bufferedLogger.GetMessages()
+		if len(messages) > 0 {
+			// Combine all messages into a single debug output
+			combinedMessage := strings.Join(messages, "\n  ")
+			cli.DisplayDebugMessage(combinedMessage)
+		}
 	}
 
 	// Display debug configuration if debug mode is enabled
@@ -543,6 +566,17 @@ func runNormalMode(ctx context.Context) error {
 	// Main interaction logic
 	var messages []*schema.Message
 	var sessionManager *session.Manager
+	if sessionPath != "" {
+		_, err := os.Stat(sessionPath)
+		if os.IsNotExist(err) {
+			content := []byte("{}")
+			if err := os.WriteFile(sessionPath, content, 0664); err != nil {
+				panic(err)
+			}
+		}
+		loadSessionPath = sessionPath
+		saveSessionPath = sessionPath
+	}
 
 	// Load existing session if specified
 	if loadSessionPath != "" {

@@ -26,6 +26,7 @@ type CLI struct {
 	width            int
 	height           int
 	compactMode      bool   // Add compact mode flag
+	debug            bool   // Add debug mode flag
 	modelName        string // Store current model name
 	lastStreamHeight int    // track how far back we need to move the cursor to overwrite streaming messages
 	usageDisplayed   bool   // track if usage info was displayed after last assistant message
@@ -35,6 +36,7 @@ type CLI struct {
 func NewCLI(debug bool, compact bool) (*CLI, error) {
 	cli := &CLI{
 		compactMode: compact,
+		debug:       debug,
 	}
 	cli.updateSize()
 	cli.messageRenderer = NewMessageRenderer(cli.width, debug)
@@ -50,6 +52,11 @@ func (c *CLI) SetUsageTracker(tracker *UsageTracker) {
 	if c.usageTracker != nil {
 		c.usageTracker.SetWidth(c.width)
 	}
+}
+
+// GetDebugLogger returns a debug logger that uses the CLI for rendering
+func (c *CLI) GetDebugLogger() *CLIDebugLogger {
+	return NewCLIDebugLogger(c)
 }
 
 // SetModelName sets the current model name for the CLI
@@ -227,6 +234,21 @@ func (c *CLI) DisplayCancellation() {
 		msg = c.compactRenderer.RenderSystemMessage("Generation cancelled by user (ESC pressed)", time.Now())
 	} else {
 		msg = c.messageRenderer.RenderSystemMessage("Generation cancelled by user (ESC pressed)", time.Now())
+	}
+	c.messageContainer.AddMessage(msg)
+	c.displayContainer()
+}
+
+// DisplayDebugMessage displays debug messages using the appropriate renderer
+func (c *CLI) DisplayDebugMessage(message string) {
+	if !c.debug {
+		return
+	}
+	var msg UIMessage
+	if c.compactMode {
+		msg = c.compactRenderer.RenderDebugMessage(message, time.Now())
+	} else {
+		msg = c.messageRenderer.RenderDebugMessage(message, time.Now())
 	}
 	c.messageContainer.AddMessage(msg)
 	c.displayContainer()

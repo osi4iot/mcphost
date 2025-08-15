@@ -15,7 +15,9 @@ import (
 	"github.com/osi4iot/mcphost/internal/config"
 	"github.com/osi4iot/mcphost/internal/hooks"
 	"github.com/osi4iot/mcphost/internal/models"
+	"github.com/osi4iot/mcphost/internal/tools"
 	"github.com/osi4iot/mcphost/internal/ui"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -596,6 +598,12 @@ func runScriptMode(ctx context.Context, mcpConfig *config.Config, prompt string,
 	}
 
 	// Create the agent using the factory (scripts don't need spinners)
+	// Use a simple debug logger for scripts
+	var debugLogger tools.DebugLogger
+	if finalDebug {
+		debugLogger = tools.NewSimpleDebugLogger(true)
+	}
+
 	mcpAgent, err := agent.CreateAgent(ctx, &agent.AgentCreationOptions{
 		ModelConfig:      modelConfig,
 		MCPConfig:        mcpConfig,
@@ -605,6 +613,7 @@ func runScriptMode(ctx context.Context, mcpConfig *config.Config, prompt string,
 		ShowSpinner:      false, // Scripts don't need spinners
 		Quiet:            quietFlag,
 		SpinnerFunc:      nil, // No spinner function needed
+		DebugLogger:      debugLogger,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create agent: %v", err)

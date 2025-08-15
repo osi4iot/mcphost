@@ -56,10 +56,12 @@ type MCPConnectionPool struct {
 	model       model.ToolCallingChatModel
 	ctx         context.Context
 	cancel      context.CancelFunc
+	debug       bool
+	debugLogger DebugLogger
 }
 
 // NewMCPConnectionPool creates a new connection pool
-func NewMCPConnectionPool(config *ConnectionPoolConfig, model model.ToolCallingChatModel) *MCPConnectionPool {
+func NewMCPConnectionPool(config *ConnectionPoolConfig, model model.ToolCallingChatModel, debug bool) *MCPConnectionPool {
 	if config == nil {
 		config = DefaultConnectionPoolConfig()
 	}
@@ -71,10 +73,18 @@ func NewMCPConnectionPool(config *ConnectionPoolConfig, model model.ToolCallingC
 		model:       model,
 		ctx:         ctx,
 		cancel:      cancel,
+		debug:       debug,
 	}
 
 	go pool.startHealthCheck()
 	return pool
+}
+
+// SetDebugLogger sets the debug logger for the connection pool
+func (p *MCPConnectionPool) SetDebugLogger(logger DebugLogger) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.debugLogger = logger
 }
 
 // GetConnection gets a connection from the pool
@@ -91,16 +101,24 @@ func (p *MCPConnectionPool) GetConnection(ctx context.Context, serverName string
 			conn.mu.Lock()
 			conn.lastUsed = time.Now()
 			conn.mu.Unlock()
-			fmt.Printf("🔄 [POOL] Reusing connection for %s\n", serverName)
+			if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+				p.debugLogger.LogDebug(fmt.Sprintf("[POOL] Reusing connection for %s", serverName))
+			}
 			return conn, nil
 		} else {
-			fmt.Printf("🔍 [POOL] Connection %s unhealthy, removing\n", serverName)
+			if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+				if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+					p.debugLogger.LogDebug(fmt.Sprintf("[POOL] Connection %s unhealthy, removing", serverName))
+				}
+			}
 			conn.client.Close()
 			delete(p.connections, serverName)
 		}
 	}
 
-	fmt.Printf("🆕 [POOL] Creating new connection for %s\n", serverName)
+	if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+		p.debugLogger.LogDebug(fmt.Sprintf("[POOL] Creating new connection for %s", serverName))
+	}
 	conn, err := p.createConnection(ctx, serverName, serverConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection for %s: %w", serverName, err)
@@ -126,10 +144,14 @@ func (p *MCPConnectionPool) GetConnectionWithHealthCheck(ctx context.Context, se
 				conn.mu.Lock()
 				conn.lastUsed = time.Now()
 				conn.mu.Unlock()
-				fmt.Printf("✅ [POOL] Reusing healthy connection for %s\n", serverName)
+				if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+					p.debugLogger.LogDebug(fmt.Sprintf("[POOL] Reusing healthy connection for %s", serverName))
+				}
 				return conn, nil
 			} else {
-				fmt.Printf("🔍 [POOL] Connection %s failed health check, removing\n", serverName)
+				if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+					p.debugLogger.LogDebug(fmt.Sprintf("[POOL] Connection %s failed health check, removing", serverName))
+				}
 				conn.client.Close()
 				delete(p.connections, serverName)
 			}
@@ -140,7 +162,9 @@ func (p *MCPConnectionPool) GetConnectionWithHealthCheck(ctx context.Context, se
 		}
 	}
 
-	fmt.Printf("🆕 [POOL] Creating new connection for %s\n", serverName)
+	if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+		p.debugLogger.LogDebug(fmt.Sprintf("[POOL] Creating new connection for %s", serverName))
+	}
 	conn, err := p.createConnection(ctx, serverName, serverConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection for %s: %w", serverName, err)
@@ -199,7 +223,9 @@ func (p *MCPConnectionPool) createConnection(ctx context.Context, serverName str
 		lastError:    nil,
 	}
 
-	fmt.Printf("✅ [POOL] Created connection for %s\n", serverName)
+	if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+		p.debugLogger.LogDebug(fmt.Sprintf("[POOL] Created connection for %s", serverName))
+	}
 	return conn, nil
 }
 
@@ -350,7 +376,9 @@ func (p *MCPConnectionPool) initializeClient(ctx context.Context, client client.
 		return fmt.Errorf("initialization timeout or failed: %v", err)
 	}
 
-	fmt.Printf("✅ [POOL] Initialized MCP client\n")
+	if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+		p.debugLogger.LogDebug(fmt.Sprintf("[POOL] Initialized MCP client"))
+	}
 	return nil
 }
 
@@ -413,10 +441,14 @@ func (p *MCPConnectionPool) HandleConnectionError(serverName string, err error) 
 
 	if isConnectionError(err) {
 		conn.isHealthy = false
-		fmt.Printf("❌ [POOL] Connection %s marked as unhealthy: %v\n", serverName, err)
+		if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+			p.debugLogger.LogDebug(fmt.Sprintf("[POOL] Connection %s unhealthy, removing", serverName))
+		}
 
 		if strings.Contains(err.Error(), "404") {
-			fmt.Printf("🔄 [POOL] 404 error for %s, will recreate on next request\n", serverName)
+			if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+				p.debugLogger.LogDebug(fmt.Sprintf("[POOL] 404 error for %s, will recreate on next request", serverName))
+			}
 		}
 	}
 }
@@ -467,11 +499,15 @@ func (p *MCPConnectionPool) Close() error {
 
 	for name, conn := range p.connections {
 		if err := conn.client.Close(); err != nil {
-			fmt.Printf("⚠️ [POOL] Failed to close connection %s: %v\n", name, err)
+			if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+				p.debugLogger.LogDebug(fmt.Sprintf("[POOL] Failed to close connection %s: %v", name, err))
+			}
 		}
 	}
 
-	fmt.Printf("🛑 [POOL] Connection pool closed\n")
+	if p.debugLogger != nil && p.debugLogger.IsDebugEnabled() {
+		p.debugLogger.LogDebug("[POOL] Connection pool closed")
+	}
 	return nil
 }
 

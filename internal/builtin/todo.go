@@ -171,8 +171,10 @@ func (ts *TodoServer) executeTodoWrite(ctx context.Context, request mcp.CallTool
 
 	// Create result with formatted output
 	result := mcp.NewToolResultText(output)
-	result.Meta = map[string]any{
-		"todos": todos,
+	result.Meta = &mcp.Meta{
+		AdditionalFields: map[string]any{
+			"todos": todos,
+		},
 	}
 
 	return result, nil
@@ -188,8 +190,10 @@ func (ts *TodoServer) executeTodoRead(ctx context.Context, request mcp.CallToolR
 
 	// Create result with formatted output
 	result := mcp.NewToolResultText(output)
-	result.Meta = map[string]any{
-		"todos": todos,
+	result.Meta = &mcp.Meta{
+		AdditionalFields: map[string]any{
+			"todos": todos,
+		},
 	}
 
 	return result, nil
