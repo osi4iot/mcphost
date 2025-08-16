@@ -127,15 +127,14 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 				}
 				h.config.OutputChan <- llmResponse
 			} else {
-				content := message.Content
-				if strings.HasPrefix(content, "```json") && strings.HasSuffix(content, "```") {
-					cleanedMessage := strings.TrimPrefix(strings.TrimSuffix(content, "```"), "```json")
+				if strings.HasPrefix(message.Content, "```json") && strings.HasSuffix(message.Content, "```") {
+					cleanedMessage := strings.TrimPrefix(strings.TrimSuffix(message.Content, "```"), "```json")
 					cleanedMessage = strings.TrimSpace(cleanedMessage)
-					content = cleanedMessage
+					message.Content = cleanedMessage
 				}
 				llmResponse := LlmResponse{
 					Status:  "ok",
-					Message: content,
+					Message: message.Content,
 				}
 				h.config.OutputChan <- llmResponse
 				messages := append([]*schema.Message{userMessage}, message)
