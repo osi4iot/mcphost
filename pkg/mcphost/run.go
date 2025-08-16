@@ -3,6 +3,7 @@ package mcphost
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/osi4iot/mcphost/internal/agent"
@@ -121,14 +122,20 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 			if err != nil {
 				fmt.Printf("Error processing user input: %v\n", err)
 				llmResponse := LlmResponse{
-					Status: "error",
+					Status:  "error",
 					Message: fmt.Sprintf("Error processing user input: %v\n", err),
 				}
 				h.config.OutputChan <- llmResponse
 			} else {
+				content := message.Content
+				if strings.HasPrefix(content, "```json") && strings.HasSuffix(content, "```") {
+					cleanedMessage := strings.TrimPrefix(strings.TrimSuffix(content, "```"), "```json")
+					cleanedMessage = strings.TrimSpace(cleanedMessage)
+					content = cleanedMessage
+				}
 				llmResponse := LlmResponse{
-					Status: "ok",
-					Message: message.Content,
+					Status:  "ok",
+					Message: content,
 				}
 				h.config.OutputChan <- llmResponse
 				messages := append([]*schema.Message{userMessage}, message)
