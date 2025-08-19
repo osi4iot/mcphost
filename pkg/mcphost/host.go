@@ -54,12 +54,13 @@ type mcpHost struct {
 // NewMCPHost crea una nueva instancia de MCPHost
 func NewMCPHost(
 	hostConfig *HostConfig,
+	parentContext context.Context,
 	getMessages func(string) []*schema.Message,
 	saveMessages func(string, []*schema.Message) error,
 ) (MCPHost, error) {
 	id := uuid.New().String()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(parentContext)
 
 	return &mcpHost{
 		id:           id,
