@@ -83,6 +83,7 @@ func (h *mcpHost) RunMCPHost() error {
 	if err != nil {
 		return fmt.Errorf("failed to create agent: %v", err)
 	}
+	defer h.mcpAgent.Close()
 
 	// Prepare data for slash commands
 	var serverNames []string
