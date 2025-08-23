@@ -47,7 +47,13 @@ type ChatMessage struct {
 	Prompt   string `json:"prompt"`
 }
 
+type McpToolCall struct {
+	ToolName string `json:"tool_name"`
+	Args     string `json:"args"`
+}
+
 type LlmResponse struct {
 	Status string
 	Message string
+	McpToolCalls  []McpToolCall
 }

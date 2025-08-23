@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/osi4iot/mcphost/internal/agent"
@@ -119,12 +120,13 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 			tempMessages := append(previousMessages, userMessage)
 
 			// Process the user input with tool calls
-			message, _, err := h.runAgenticStep(mcpAgent, tempMessages)
+			message, _, mcpToolCalls, err := h.runAgenticStep(mcpAgent, tempMessages)
 			if err != nil {
 				fmt.Printf("Error processing user input: %v\n", err)
 				llmResponse := LlmResponse{
-					Status:  "error",
-					Message: fmt.Sprintf("Error processing user input: %v\n", err),
+					Status:       "error",
+					Message:      fmt.Sprintf("Error processing user input: %v\n", err),
+					McpToolCalls: nil,
 				}
 				h.config.OutputChan <- llmResponse
 			} else {
@@ -134,8 +136,9 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 					message.Content = cleanedMessage
 				}
 				llmResponse := LlmResponse{
-					Status:  "ok",
-					Message: message.Content,
+					Status:       "ok",
+					Message:      message.Content,
+					McpToolCalls: mcpToolCalls,
 				}
 				h.config.OutputChan <- llmResponse
 				messages := append([]*schema.Message{userMessage}, message)
@@ -150,7 +153,10 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 }
 
 // runAgenticStep processes a single step of the agentic loop (handles tool calls)
-func (h *mcpHost) runAgenticStep(mcpAgent *agent.Agent, messages []*schema.Message) (*schema.Message, []*schema.Message, error) {
+func (h *mcpHost) runAgenticStep(mcpAgent *agent.Agent, messages []*schema.Message) (*schema.Message, []*schema.Message, []McpToolCall, error) {
+	var mpcToolCalls []McpToolCall = make([]McpToolCall, 0)
+	var mu sync.Mutex
+
 	result, err := mcpAgent.GenerateWithLoopAndStreaming(h.ctx, messages,
 		// Tool call handler - called when a tool is about to be executed
 		func(toolName, toolArgs string) {
@@ -205,6 +211,14 @@ func (h *mcpHost) runAgenticStep(mcpAgent *agent.Agent, messages []*schema.Messa
 			if h.config.Debug {
 				fmt.Printf("Tool result for %s: %s\n", toolName, resultContent)
 			}
+			
+			// Record the tool call
+			mu.Lock()
+			mpcToolCalls = append(mpcToolCalls, McpToolCall{
+				ToolName: toolName,
+				Args:     toolArgs,
+			})
+			mu.Unlock()
 		},
 		// Response handler - called when the LLM generates a response
 		func(content string) {
@@ -218,7 +232,7 @@ func (h *mcpHost) runAgenticStep(mcpAgent *agent.Agent, messages []*schema.Messa
 	)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Get the final response and conversation messages
@@ -226,5 +240,5 @@ func (h *mcpHost) runAgenticStep(mcpAgent *agent.Agent, messages []*schema.Messa
 	conversationMessages := result.ConversationMessages
 
 	// Return the final response and all conversation messages
-	return response, conversationMessages, nil
+	return response, conversationMessages, mpcToolCalls, nil
 }
