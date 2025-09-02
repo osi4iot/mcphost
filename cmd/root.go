@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -148,40 +147,40 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		// Try to load config files with environment variable substitution
-		configLoaded := false
-		configPaths := []struct {
-			name  string
-			types []string
-		}{
-			{".mcphost", []string{"yml", "yaml", "json"}},
-			{".mcp", []string{"yml", "yaml", "json"}},
-		}
+		// Set up viper config search paths and names
+		// Current directory has higher priority than home directory
+		viper.AddConfigPath(".")  // Current directory (searched first)
+		viper.AddConfigPath(home) // Home directory (searched second)
 
-		for _, configPath := range configPaths {
-			for _, configType := range configPath.types {
-				fullPath := filepath.Join(home, configPath.name+"."+configType)
-				if _, err := os.Stat(fullPath); err == nil {
-					if err := loadConfigWithEnvSubstitution(fullPath); err != nil {
-						// Only exit on environment variable substitution errors
-						// Other errors should be handled gracefully
-						if strings.Contains(err.Error(), "environment variable substitution failed") {
-							fmt.Fprintf(os.Stderr, "Error reading config file '%s': %v\n", fullPath, err)
-							os.Exit(1)
-						}
-						// For other errors, continue trying other config files
-						continue
+		// Try to find and load config file using viper's search mechanism
+		configLoaded := false
+		configNames := []string{".mcphost", ".mcp"} // Try .mcphost first, then legacy .mcp
+
+		for _, name := range configNames {
+			viper.SetConfigName(name)
+
+			// Try to read the config file
+			if err := viper.ReadInConfig(); err == nil {
+				// Config file found, now reload it with env substitution
+				configPath := viper.ConfigFileUsed()
+				if err := loadConfigWithEnvSubstitution(configPath); err != nil {
+					// Only exit on environment variable substitution errors
+					if strings.Contains(err.Error(), "environment variable substitution failed") {
+						fmt.Fprintf(os.Stderr, "Error reading config file '%s': %v\n", configPath, err)
+						os.Exit(1)
 					}
-					configLoaded = true
-					break
+					// For other errors, continue trying other config files
+					continue
 				}
-			}
-			if configLoaded {
+				configLoaded = true
 				break
 			}
 		}
 
 		// If no config file was loaded, continue without error (optional config)
+		if !configLoaded && debugMode {
+			fmt.Fprintf(os.Stderr, "No config file found in current directory or home directory\n")
+		}
 	}
 
 	// Set environment variable prefix
