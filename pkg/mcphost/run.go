@@ -142,7 +142,10 @@ func (h *mcpHost) runInteractiveLoop(mcpAgent *agent.Agent) error {
 				}
 				h.config.OutputChan <- llmResponse
 				messages := append([]*schema.Message{userMessage}, message)
-				err = h.saveMessages(chatMessage.UserName, messages)
+				mcpToolCallsArray := make([][]McpToolCall, 2)
+				mcpToolCallsArray[0] = nil
+				mcpToolCallsArray[1] = mcpToolCalls
+				err = h.saveMessages(chatMessage.UserName, messages, mcpToolCallsArray)
 				if err != nil {
 					fmt.Printf("Error saving messages for user %s: %v\n", chatMessage.UserName, err)
 				}

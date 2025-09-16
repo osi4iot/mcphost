@@ -48,7 +48,7 @@ type mcpHost struct {
 	mu           sync.RWMutex
 	mcpAgent     *agent.Agent
 	getMessages  func(string) []*schema.Message
-	saveMessages func(string, []*schema.Message) error
+	saveMessages func(string, []*schema.Message, [][]McpToolCall) error
 }
 
 // NewMCPHost crea una nueva instancia de MCPHost
@@ -56,7 +56,7 @@ func NewMCPHost(
 	hostConfig *HostConfig,
 	parentContext context.Context,
 	getMessages func(string) []*schema.Message,
-	saveMessages func(string, []*schema.Message) error,
+	saveMessages func(string, []*schema.Message, [][]McpToolCall) error,
 ) (MCPHost, error) {
 	id := uuid.New().String()
 
